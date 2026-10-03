@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: ejcprint-api
+    runtime: node
+    plan: 0.5c-512mb
+    rootDir: backend
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/main.js
+    disk:
+      name: ejcprint-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: file:/var/data/ejcprint.db
+      - key: PAYMENT_PROOFS_DIR
+        value: /var/data/payment-proofs
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: ADMIN_SESSION_SECRET
+        generateValue: true
