@@ -4,17 +4,19 @@ services:
     runtime: node
     plan: 0.5c-512mb
     rootDir: backend
-    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
-    startCommand: npx prisma migrate deploy && node dist/main.js
-    disk:
-      name: ejcprint-data
-      mountPath: /var/data
-      sizeGB: 1
+    buildCommand: npm ci --include=dev && npm run prisma:generate:mysql && npm run build
+    startCommand: npm run prisma:migrate:mysql && node dist/main.js
     envVars:
       - key: DATABASE_URL
-        value: file:/var/data/ejcprint.db
-      - key: PAYMENT_PROOFS_DIR
-        value: /var/data/payment-proofs
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD_HASH

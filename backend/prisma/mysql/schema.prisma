@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  ADMIN
+}
+
+enum OrderStatus {
+  RECEIVED
+  PREPARING
+  PRINTING
+  READY_FOR_PICKUP
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  name                String
+  email               String?   @unique
+  phone               String?   @unique
+  passwordHash        String?
+  sessionVersion      Int       @default(0)
+  resetTokenHash      String?
+  resetTokenExpiresAt DateTime?
+  resetTokenUsedAt    DateTime?
+  role                UserRole  @default(CLIENT)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  orders              Order[]
+}
+
+model Order {
+  id                String      @id @default(cuid())
+  number            String      @unique
+  externalReference String?     @unique
+  clientId          String?
+  client            User?       @relation(fields: [clientId], references: [id])
+  customerName      String
+  customerPhone     String
+  service           String
+  unitPriceCents    Int
+  pageCount         Int
+  copyCount         Int
+  doubleSided       Boolean     @default(false)
+  sheetsRequired    Int
+  bindingType       String      @default("SEM_ENCADERNACAO")
+  bindingPriceCents Int         @default(0)
+  totalCents        Int
+  status            OrderStatus @default(RECEIVED)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  documents         Document[]
+  payments          Payment[]
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  externalReference String?       @unique
+  orderId           String
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amountCents       Int
+  method            String
+  type              String
+  status            PaymentStatus @default(PENDING)
+  reference         String?
+  proofStorageKey   String?       @unique
+  proofSha256       String?       @unique
+  proofOriginalName String?
+  proofMimeType     String?
+  proofSizeBytes    Int?
+  rejectionReason   String?
+  createdAt         DateTime      @default(now())
+  confirmedAt       DateTime?
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  originalName String
+  storageKey   String   @unique
+  mimeType     String?
+  sizeBytes    Int?
+  createdAt    DateTime @default(now())
+}

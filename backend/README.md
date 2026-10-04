@@ -1,8 +1,8 @@
 # EJC Print API
 
-Backend NestJS separado do aplicativo Expo, também usando SQLite. O app atual
-continua usando a sua base SQLite local; a integração com a API será feita por
-etapas, mantendo-a como fallback durante a transição.
+Backend NestJS separado do aplicativo Expo. O desenvolvimento local usa SQLite;
+o deploy no Render usa MySQL e Cloudflare R2 para guardar comprovativos. O app
+continua usando a sua base SQLite local durante a transição.
 
 ## Primeira execução
 
@@ -36,32 +36,32 @@ etapas, mantendo-a como fallback durante a transição.
    acessível para sincronização; o SQLite local de cada aparelho/navegador não é
    compartilhado automaticamente.
 
-## Render e preservação de dados
+## Render, MySQL e comprovativos
 
-O Blueprint `../render.yaml` configura um Web Service Node com disco persistente
-montado em `/var/data`. Discos persistentes exigem um plano pago no Render,
-aceitam apenas uma instância e podem causar alguns segundos de indisponibilidade
-durante deploys. Guardar o Blueprint no repositório não cria nem cobra recursos.
+O Blueprint `../render.yaml` configura o backend no Render. Em produção, defina
+`DATABASE_URL` com a URL MySQL do provedor escolhido e configure uma base MySQL
+antes do primeiro deploy. O schema e migrations MySQL ficam em
+`prisma/mysql`; o schema e migrations locais SQLite ficam em `prisma`.
 
-No Render, `DATABASE_URL` usa `file:/var/data/ejcprint.db` e
-`PAYMENT_PROOFS_DIR` usa `/var/data/payment-proofs`. Localmente, os padrões
-continuam sendo `prisma/dev.db` e `storage/payment-proofs`.
+Os comprovativos usam Cloudflare R2 pela API compatível com S3. Crie um bucket
+privado e uma chave API com acesso apenas a esse bucket. Configure no Render
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` e `R2_BUCKET_NAME`.
+O backend recusa iniciar em produção se as credenciais R2 estiverem incompletas
+ou ausentes. Localmente, sem essas variáveis, os comprovativos continuam em
+`storage/payment-proofs`.
 
 Antes de apontar um APK para o Render:
 
-1. Pare gravações no backend local e faça backup de `prisma/dev.db` e da pasta
-   `storage/payment-proofs`.
-2. Provisione o Blueprint e o disco; configure os segredos de administrador no
-   Dashboard do Render.
-3. Copie o banco e os comprovativos existentes para `/var/data` antes de
-   enviar tráfego de clientes. Preserve o conteúdo de `prisma/migrations` para
-   que `prisma migrate deploy` possa aplicar migrations pendentes.
-4. Teste login, pedidos, comprovativos e reinício do serviço no endereço HTTPS.
-5. Só então defina `EXPO_PUBLIC_API_URL=https://<dominio-publico>/api` no
-   ambiente Production do EAS e gere o perfil `online`.
-
-Não escale este backend para várias instâncias enquanto usar SQLite no disco
-local do serviço.
+1. Faça cópia de segurança da base SQLite local e dos ficheiros existentes.
+2. Crie a base MySQL e configure `DATABASE_URL` e as quatro variáveis R2 no
+   Dashboard do Render; não coloque credenciais no repositório.
+3. Aplique as migrations MySQL pelo comando de arranque do Render. Migrations
+   SQLite não devem ser executadas na base MySQL.
+4. Transfira os dados SQLite para MySQL e carregue os comprovativos existentes
+   para o bucket R2; atualizar apenas a variável não migra os dados.
+5. Teste login, pedidos e upload/consulta de comprovativos na URL HTTPS.
+6. Defina `EXPO_PUBLIC_API_URL=https://<dominio-publico>/api` no ambiente
+   Production do EAS e só então gere o perfil `online`.
 
 Com o servidor iniciado, os primeiros endpoints são:
 
@@ -97,5 +97,6 @@ obter essa sessão de recuperação, crie um utilizador com:
 As palavras-passe dos utilizadores nunca são guardadas em texto simples.
 
 O endpoint de criação aceita o campo multipart `proof` para imagens JPEG/PNG ou
-PDF até 5 MB. O ficheiro é guardado em `storage/payment-proofs` e pode ser
-consultado apenas por `GET /api/payments/:id/proof` com sessão de administrador.
+PDF até 5 MB. O ficheiro é guardado localmente durante desenvolvimento e no
+bucket privado R2 em produção. Pode ser consultado apenas por
+`GET /api/payments/:id/proof` com sessão de administrador.

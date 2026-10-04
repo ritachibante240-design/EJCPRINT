@@ -9,10 +9,15 @@
     "lint": "eslint \"{src,test}/**/*.ts\" --fix",
     "lint:check": "eslint \"{src,test}/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:generate:mysql": "prisma generate --schema prisma/mysql/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:migrate:mysql": "prisma migrate deploy --schema prisma/mysql/schema.prisma",
+    "prisma:status": "prisma migrate status --schema prisma/schema.prisma",
+    "prisma:status:mysql": "prisma migrate status --schema prisma/mysql/schema.prisma"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1146.0",
     "@nestjs/common": "^11.1.12",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.12",

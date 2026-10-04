@@ -1,14 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
-import { createReadStream } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
-import { basename, extname, join, resolve } from 'node:path';
+import { basename, extname } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProofStorageService } from './proof-storage.service';
 @Injectable()
 export class PaymentsService {
   private proofHashBackfill: Promise<void> | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly proofStorage: ProofStorageService) {}
   async create(input: { externalReference: string; orderId: string; amountCents: number; method: string; type: string; reference?: string }, proof?: Express.Multer.File) {
     if (input.method.trim() !== 'Dinheiro' && !proof) throw new BadRequestException('O comprovativo é obrigatório para este método de pagamento.');
     const reference = input.externalReference.trim();
@@ -79,12 +78,12 @@ export class PaymentsService {
       });
 
       if (storedProof && !result.proofWasUsed) {
-        await unlink(join(this.storageDirectory(), storedProof.storageKey)).catch(() => undefined);
+        await this.proofStorage.delete(storedProof.storageKey).catch(() => undefined);
       }
       return result.payment;
     } catch (error) {
       if (storedProof) {
-        await unlink(join(this.storageDirectory(), storedProof.storageKey)).catch(() => undefined);
+        await this.proofStorage.delete(storedProof.storageKey).catch(() => undefined);
       }
       if (this.isProofHashUniqueViolation(error)) {
         throw new BadRequestException('Este comprovativo já foi enviado noutro pagamento. Anexe um comprovativo diferente.');
@@ -103,20 +102,14 @@ export class PaymentsService {
   async proof(id: string) {
     const payment = await this.prisma.payment.findUnique({ where: { id } });
     if (!payment?.proofStorageKey) throw new NotFoundException('Comprovativo não encontrado.');
-    const path = join(this.storageDirectory(), payment.proofStorageKey);
-    return { file: new StreamableFile(createReadStream(path)), mimeType: payment.proofMimeType ?? 'application/octet-stream', name: payment.proofOriginalName ?? basename(path) };
+    const file = await this.proofStorage.get(payment.proofStorageKey);
+    return { file: new StreamableFile(file), mimeType: payment.proofMimeType ?? 'application/octet-stream', name: payment.proofOriginalName ?? basename(payment.proofStorageKey) };
   }
 
   private async storeProof(proof: Express.Multer.File) {
     const extension = extname(proof.originalname).toLowerCase() || '.bin';
     const storageKey = `${randomUUID()}${extension}`;
-    await mkdir(this.storageDirectory(), { recursive: true });
-    try {
-      await writeFile(join(this.storageDirectory(), storageKey), proof.buffer, { flag: 'wx' });
-    } catch (error) {
-      await unlink(join(this.storageDirectory(), storageKey)).catch(() => undefined);
-      throw error;
-    }
+    await this.proofStorage.put(storageKey, proof.buffer, proof.mimetype);
     return {
       storageKey,
       originalName: basename(proof.originalname),
@@ -144,7 +137,7 @@ export class PaymentsService {
       if (!payment.proofStorageKey) continue;
       let buffer: Buffer;
       try {
-        buffer = await readFile(join(this.storageDirectory(), payment.proofStorageKey));
+        buffer = await this.proofStorage.get(payment.proofStorageKey);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
         throw error;
@@ -165,13 +158,6 @@ export class PaymentsService {
       ? prismaError.meta.target.join(' ')
       : String(prismaError.meta?.target ?? '');
     return target.includes('proofSha256');
-  }
-
-  private storageDirectory() {
-    const configured = process.env.PAYMENT_PROOFS_DIR?.trim();
-    return configured
-      ? resolve(configured)
-      : join(process.cwd(), 'storage', 'payment-proofs');
   }
 
   async approve(id: string) {
