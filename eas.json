@@ -12,6 +12,9 @@
     "online": {
       "distribution": "internal",
       "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://ejcprint-1.onrender.com/api"
+      },
       "android": {
         "buildType": "apk"
       }
