@@ -7,26 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  CLIENT
-  ADMIN
-}
-
-enum OrderStatus {
-  RECEIVED
-  PREPARING
-  PRINTING
-  READY_FOR_PICKUP
-  DELIVERED
-  CANCELLED
-}
-
-enum PaymentStatus {
-  PENDING
-  CONFIRMED
-  REJECTED
-}
-
 model User {
   id                  String    @id @default(cuid())
   name                String
@@ -48,7 +28,6 @@ model Order {
   number            String      @unique
   externalReference String?     @unique
   clientId          String?
-  client            User?       @relation(fields: [clientId], references: [id])
   customerName      String
   customerPhone     String
   service           String
@@ -64,14 +43,16 @@ model Order {
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   documents         Document[]
+  client            User?       @relation(fields: [clientId], references: [id])
   payments          Payment[]
+
+  @@index([clientId], map: "Order_clientId_fkey")
 }
 
 model Payment {
   id                String        @id @default(cuid())
   externalReference String?       @unique
   orderId           String
-  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   amountCents       Int
   method            String
   type              String
@@ -85,15 +66,40 @@ model Payment {
   rejectionReason   String?
   createdAt         DateTime      @default(now())
   confirmedAt       DateTime?
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId], map: "Payment_orderId_fkey")
 }
 
 model Document {
   id           String   @id @default(cuid())
   orderId      String
-  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   originalName String
   storageKey   String   @unique
   mimeType     String?
   sizeBytes    Int?
   createdAt    DateTime @default(now())
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId], map: "Document_orderId_fkey")
+}
+
+enum UserRole {
+  CLIENT
+  ADMIN
+}
+
+enum OrderStatus {
+  RECEIVED
+  PREPARING
+  PRINTING
+  READY_FOR_PICKUP
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
 }
