@@ -1,5 +1,5 @@
 import { db } from '../database/database';
-import { sincronizarPagamentoLocal, sincronizarPagamentosPendentes } from './sincronizacaoPagamentoService';
+import { sincronizarPagamentoLocal } from './sincronizacaoPagamentoService';
 
 // cspell:ignore Metodo
 export type MetodoPagamento =
@@ -245,7 +245,6 @@ export async function obterPagamentoPendentePedido(pedidoId: number) {
 }
 
 export async function listarPagamentosPendentes() {
-  void sincronizarPagamentosPendentes().catch(() => undefined);
   return db.getAllAsync<PagamentoPendente>(`SELECT pg.*, p.numero AS numero_pedido, p.cliente, p.contacto, p.total AS total_pedido, p.valor_pago FROM pagamentos pg INNER JOIN pedidos p ON p.id = pg.pedido_id WHERE pg.status = 'PENDENTE' ORDER BY pg.data_criacao ASC`);
 }
 

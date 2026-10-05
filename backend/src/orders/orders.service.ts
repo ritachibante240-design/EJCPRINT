@@ -1,11 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { basename, extname } from 'node:path';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { ObjectStorageService } from '../storage/object-storage.service';
 import type { OrderStatus } from './order-status';
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly storage: ObjectStorageService) {}
 
   async create(input: CreateOrderDto) {
     const existingOrder = await this.prisma.order.findUnique({
@@ -50,6 +53,34 @@ export class OrdersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async uploadDocument(orderId: string, file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Selecione o documento do pedido.');
+    const order = await this.prisma.order.findUnique({ where: { id: orderId }, select: { id: true } });
+    if (!order) throw new NotFoundException('Pedido não encontrado.');
+
+    const existing = await this.prisma.document.findFirst({ where: { orderId }, orderBy: { createdAt: 'asc' } });
+    if (existing) return existing;
+
+    const originalName = basename(file.originalname);
+    const storageKey = `${randomUUID()}${extname(originalName).toLowerCase()}`;
+    await this.storage.put(storageKey, file.buffer, file.mimetype);
+    try {
+      return await this.prisma.document.create({
+        data: { orderId, originalName, storageKey, mimeType: file.mimetype, sizeBytes: file.size },
+      });
+    } catch (error) {
+      await this.storage.delete(storageKey).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async document(orderId: string) {
+    const document = await this.prisma.document.findFirst({ where: { orderId }, orderBy: { createdAt: 'asc' } });
+    if (!document) throw new NotFoundException('Documento não encontrado.');
+    const file = await this.storage.get(document.storageKey);
+    return { file: new StreamableFile(file), mimeType: document.mimeType ?? 'application/octet-stream', name: document.originalName };
   }
 
   async findOne(id: string) {

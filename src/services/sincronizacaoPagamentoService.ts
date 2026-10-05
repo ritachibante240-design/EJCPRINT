@@ -1,7 +1,7 @@
 import { db } from '../database/database';
 import { fetch as expoFetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
-import { sincronizarPedidosPendentes } from './sincronizacaoPedidoService';
+import { sincronizarPedidosPendentes, sincronizarPedidosRecebidos } from './sincronizacaoPedidoService';
 import { obterTokenAdministrador } from './adminAuthService';
 import type { MetodoPagamento, Pagamento, TipoPagamento } from './pagamentoService';
 
@@ -9,6 +9,21 @@ type EstadoRemoto = 'PENDING' | 'CONFIRMED' | 'REJECTED';
 type PagamentoRemoto = { id: string; status: EstadoRemoto; confirmedAt?: string | null; rejectionReason?: string | null };
 type PedidoRemotoLocal = { remoto_id: string | null };
 type OpcoesSincronizacao = { propagarErrosDeCliente?: boolean };
+type PagamentoPendenteRemoto = {
+  id: string;
+  externalReference: string | null;
+  orderId: string;
+  amountCents: number;
+  method: MetodoPagamento;
+  type: TipoPagamento;
+  status: EstadoRemoto;
+  reference: string | null;
+  proofOriginalName: string | null;
+  proofMimeType: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+  confirmedAt: string | null;
+};
 
 class ApiResponseError extends Error {
   constructor(readonly status: number, message: string) {
@@ -170,4 +185,84 @@ export async function sincronizarPagamentosPendentes() {
      ORDER BY id ASC`
   );
   for (const pagamento of pendentes) await sincronizarPagamentoLocal(pagamento);
+}
+
+export async function sincronizarPagamentosRecebidos() {
+  const api = urlApi();
+  const token = await obterTokenAdministrador();
+  if (!api || !token) return;
+
+  await sincronizarPedidosPendentes();
+  await sincronizarPedidosRecebidos();
+
+  const resposta = await fetch(`${api}/payments/pending`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
+
+  const pagamentos = await resposta.json() as (PagamentoPendenteRemoto & {
+    order: { id: string; number: string; customerName: string; customerPhone: string; totalCents: number };
+    proofStorageKey: string | null;
+  })[];
+
+  for (const pagamento of pagamentos) {
+    const pedidoLocal = await db.getFirstAsync<{ id: number }>(
+      'SELECT id FROM pedidos WHERE remoto_id = ? LIMIT 1',
+      pagamento.orderId
+    );
+    if (!pedidoLocal) continue;
+
+    const externalReference = pagamento.externalReference ?? `pagamento-remoto-${pagamento.id}`;
+    const comprovativoUri = pagamento.proofStorageKey
+      ? `${api}/payments/${pagamento.id}/proof`
+      : null;
+    const existente = await db.getFirstAsync<Pagamento>(
+      'SELECT * FROM pagamentos WHERE remoto_id = ? OR sync_chave = ? LIMIT 1',
+      pagamento.id,
+      externalReference
+    );
+
+    if (existente?.sincronizacao_estado === 'PENDENTE' && existente.status !== 'PENDENTE') continue;
+
+    if (existente) {
+      await db.runAsync(
+        `UPDATE pagamentos SET
+          pedido_id = ?, valor = ?, metodo = ?, referencia = ?, data_criacao = ?, tipo = ?,
+          status = 'PENDENTE', comprovativo_nome = ?, comprovativo_uri = ?,
+          data_confirmacao = NULL, motivo_rejeicao = NULL, sync_chave = ?, remoto_id = ?,
+          sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL
+         WHERE id = ?`,
+        pedidoLocal.id,
+        pagamento.amountCents / 100,
+        pagamento.method,
+        pagamento.reference,
+        pagamento.createdAt,
+        pagamento.type,
+        pagamento.proofOriginalName,
+        comprovativoUri,
+        externalReference,
+        pagamento.id,
+        existente.id
+      );
+      continue;
+    }
+
+    await db.runAsync(
+      `INSERT INTO pagamentos (
+        pedido_id, valor, metodo, referencia, data_criacao, tipo, status,
+        comprovativo_nome, comprovativo_uri, data_confirmacao, motivo_rejeicao,
+        sync_chave, remoto_id, sincronizacao_estado, sincronizacao_erro
+       ) VALUES (?, ?, ?, ?, ?, ?, 'PENDENTE', ?, ?, NULL, NULL, ?, ?, 'SINCRONIZADO', NULL)`,
+      pedidoLocal.id,
+      pagamento.amountCents / 100,
+      pagamento.method,
+      pagamento.reference,
+      pagamento.createdAt,
+      pagamento.type,
+      pagamento.proofOriginalName,
+      comprovativoUri,
+      externalReference,
+      pagamento.id
+    );
+  }
 }

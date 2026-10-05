@@ -27,8 +27,8 @@ import {
 } from "../../services/sincronizacaoPedidoService";
 import { obterNomeEstado, obterProximaAcao } from "../../utils/estadoPedido";
 import { Ionicons } from "@expo/vector-icons";
-import { File } from "expo-file-system";
-import * as Sharing from "expo-sharing";
+import { abrirArquivoPedido } from "../../services/arquivoRemotoService";
+import { obterTokenAdministrador } from "../../services/adminAuthService";
 
 const estados = [
   "Pedido recebido",
@@ -152,27 +152,9 @@ export default function PedidosScreen() {
     }
 
     try {
-      if (Platform.OS === "web") {
-        const link = document.createElement("a");
-        link.href = pedido.documento_uri;
-        link.download = pedido.documento_nome ?? "documento";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        return;
-      }
-
-      const arquivo = new File(pedido.documento_uri);
-      if (!arquivo.exists) {
-        throw new Error("O ficheiro já não está disponível neste dispositivo.");
-      }
-
-      if (!(await Sharing.isAvailableAsync())) {
-        throw new Error(
-          "O download de ficheiros não está disponível neste dispositivo.",
-        );
-      }
-
+      const token = pedido.documento_uri.startsWith("http")
+        ? await obterTokenAdministrador()
+        : null;
       const extensao = pedido.documento_nome?.split(".").pop()?.toLowerCase();
       const mimeType =
         extensao === "pdf"
@@ -183,10 +165,12 @@ export default function PedidosScreen() {
               ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               : "application/octet-stream";
 
-      await Sharing.shareAsync(arquivo.uri, {
-        dialogTitle: `Baixar ${pedido.documento_nome ?? "documento"}`,
+      await abrirArquivoPedido(
+        pedido.documento_uri,
+        pedido.documento_nome ?? "documento",
         mimeType,
-      });
+        token,
+      );
     } catch (erro) {
       showAppAlert(
         "Não foi possível baixar o documento",

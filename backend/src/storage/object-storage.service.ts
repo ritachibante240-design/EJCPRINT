@@ -4,7 +4,7 @@ import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 @Injectable()
-export class ProofStorageService {
+export class ObjectStorageService {
   private readonly client?: S3Client;
   private readonly bucket?: string;
   private readonly localDirectory?: string;

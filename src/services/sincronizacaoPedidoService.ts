@@ -1,4 +1,6 @@
 import { db } from '../database/database';
+import { fetch as expoFetch } from 'expo/fetch';
+import { File } from 'expo-file-system';
 import { obterTokenAdministrador } from './adminAuthService';
 import type { Pedido } from './pedidoService';
 
@@ -21,10 +23,11 @@ type PedidoRemoto = {
   totalCents: number;
   status: EstadoPedidoRemoto;
   createdAt: string;
+  documents?: { id: string; originalName: string }[];
   payments?: { amountCents: number; status: string }[];
 };
 
-type PedidoLocalSync = Pick<Pedido, 'id' | 'remoto_id' | 'sync_chave' | 'estado' | 'sincronizacao_estado'>;
+type PedidoLocalSync = Pick<Pedido, 'id' | 'remoto_id' | 'sync_chave' | 'estado' | 'sincronizacao_estado' | 'documento_nome' | 'documento_uri' | 'documento_remoto_id'>;
 
 const estadoRemotoParaLocal: Record<EstadoPedidoRemoto, string> = {
   RECEIVED: 'Pedido recebido',
@@ -111,6 +114,28 @@ export async function sincronizarPedidoLocal(pedido: Pedido) {
       );
     }
 
+    if (pedido.documento_uri && !pedido.documento_remoto_id) {
+      const body = new FormData();
+      if (pedido.documento_uri.startsWith('data:')) {
+        const respostaArquivo = await fetch(pedido.documento_uri);
+        const arquivo = await respostaArquivo.blob();
+        body.append('document', arquivo, pedido.documento_nome ?? 'documento');
+      } else {
+        const arquivo = new File(pedido.documento_uri);
+        if (!arquivo.exists) throw new Error('O documento do pedido não está disponível neste dispositivo.');
+        body.append('document', arquivo);
+      }
+
+      const respostaDocumento = await expoFetch(`${apiUrl}/orders/${remotoId}/document`, {
+        method: 'POST',
+        body,
+      });
+      if (!respostaDocumento.ok) throw new Error(await mensagemErroApi(respostaDocumento));
+      const documentoRemoto = await respostaDocumento.json() as { id: string };
+      if (!documentoRemoto.id) throw new Error('A API não retornou o identificador do documento.');
+      await db.runAsync('UPDATE pedidos SET documento_remoto_id = ? WHERE id = ?', documentoRemoto.id, pedido.id);
+    }
+
     if (pedido.estado !== 'Pedido recebido') {
       const token = await obterTokenAdministrador();
       if (!token) throw new Error('Inicie sessão como administrador para sincronizar o estado do pedido.');
@@ -149,7 +174,7 @@ export async function sincronizarPedidosPendentes() {
 async function guardarPedidoRemoto(pedido: PedidoRemoto) {
   const syncChave = pedido.externalReference ?? `pedido-remoto-${pedido.id}`;
   const existente = await db.getFirstAsync<PedidoLocalSync>(
-    'SELECT id, remoto_id, sync_chave, estado, sincronizacao_estado FROM pedidos WHERE remoto_id = ? OR sync_chave = ? LIMIT 1',
+    'SELECT id, remoto_id, sync_chave, estado, sincronizacao_estado, documento_nome, documento_uri, documento_remoto_id FROM pedidos WHERE remoto_id = ? OR sync_chave = ? LIMIT 1',
     pedido.id,
     syncChave
   );
@@ -159,6 +184,14 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
   const valorPago = (pedido.payments ?? [])
     .filter((pagamento) => pagamento.status === 'CONFIRMED')
     .reduce((total, pagamento) => total + pagamento.amountCents, 0) / 100;
+  const documentoRemoto = pedido.documents?.[0];
+  const documentoRemotoId = documentoRemoto?.id ?? existente?.documento_remoto_id ?? null;
+  const documentoUri = existente?.documento_uri && !existente.documento_remoto_id
+    ? existente.documento_uri
+    : documentoRemoto
+      ? `${obterUrlApi()}/orders/${pedido.id}/document`
+      : existente?.documento_uri ?? null;
+  const documentoNome = documentoRemoto?.originalName ?? existente?.documento_nome ?? null;
   const valores = [
     pedido.number,
     pedido.customerName,
@@ -169,6 +202,9 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
     pedido.totalCents / 100,
     estado,
     pedido.createdAt,
+    documentoNome,
+    documentoUri,
+    documentoRemotoId,
     pedido.pageCount,
     pedido.copyCount,
     pedido.doubleSided ? 1 : 0,
@@ -184,7 +220,8 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
     await db.runAsync(
       `UPDATE pedidos SET
         numero = ?, cliente = ?, contacto = ?, servico = ?, preco_unitario = ?,
-        quantidade = ?, total = ?, estado = ?, data_criacao = ?, numero_paginas = ?,
+        quantidade = ?, total = ?, estado = ?, data_criacao = ?, documento_nome = ?,
+        documento_uri = ?, documento_remoto_id = ?, numero_paginas = ?,
         numero_copias = ?, frente_verso = ?, folhas_necessarias = ?, valor_pago = ?,
         tipo_encadernacao = ?, preco_encadernacao = ?, sync_chave = ?, remoto_id = ?,
         sincronizacao_estado = ?
@@ -199,10 +236,11 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
   await db.runAsync(
     `INSERT INTO pedidos (
       numero, cliente, contacto, servico, preco_unitario, quantidade, total, estado,
-      data_criacao, numero_paginas, numero_copias, frente_verso, folhas_necessarias,
+      data_criacao, documento_nome, documento_uri, documento_remoto_id, numero_paginas,
+      numero_copias, frente_verso, folhas_necessarias,
       valor_pago, tipo_encadernacao, preco_encadernacao, sync_chave, remoto_id,
       sincronizacao_estado
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO')`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO')`,
     ...valores
   );
 }

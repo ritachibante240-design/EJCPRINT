@@ -455,6 +455,7 @@ export async function iniciarBancoDados() {
   try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN remoto_id TEXT`); } catch {}
   try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN sincronizacao_estado TEXT NOT NULL DEFAULT 'PENDENTE'`); } catch {}
   try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN sincronizacao_erro TEXT`); } catch {}
+  try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN documento_remoto_id TEXT`); } catch {}
 
   const chaveMigracao = 'MIGRAR_PAGAMENTOS_ANTIGOS_V1';
   const migracao = await db.getFirstAsync<{ chave: string }>('SELECT chave FROM migracoes WHERE chave = ?', chaveMigracao);

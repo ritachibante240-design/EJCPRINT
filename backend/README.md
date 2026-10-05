@@ -66,18 +66,25 @@ Antes de apontar um APK para o Render:
 Com o servidor iniciado, os primeiros endpoints são:
 
 - `POST /api/orders`
+- `POST /api/orders/:id/document` (multipart `document`, PDF/DOC/DOCX, até 20 MB)
 - `GET /api/orders`
 - `GET /api/orders/:id`
+- `GET /api/orders/:id/document`
 - `PATCH /api/orders/:id/status`
 
-As rotas de consulta e alteração de pedidos exigem sessão administrativa. Criar
-um pedido permanece público para permitir o fluxo do cliente.
+Criar pedidos e enviar o respetivo documento permanecem públicos para permitir o
+fluxo do cliente. Consultar pedidos/documentos e alterar estados exigem sessão
+administrativa. A app do administrador sincroniza a lista remota com o SQLite
+local ao abrir a tela ou atualizar manualmente; estados alterados ficam pendentes
+localmente se a rede estiver indisponível e são reenviados depois.
 
 O servidor recalcula o total e as folhas necessárias; portanto, não aceita
 esses valores calculados diretamente do cliente. Os valores monetários são
-gravados em centavos para evitar erros de arredondamento do SQLite. Documentos
-ainda não são enviados nesta etapa: o modelo `Document` prepara o armazenamento
-que será acrescentado em seguida.
+gravados em centavos para evitar erros de arredondamento. Documentos são guardados
+localmente durante desenvolvimento e no bucket privado R2 em produção. As telas
+administrativas importam pagamentos pendentes remotos antes de os listar; ao
+aprovar ou rejeitar, a decisão é sincronizada de volta ao servidor. Os estados
+do pedido só avançam para produção/entrega depois das regras de pagamento atuais.
 
 ## Acesso administrativo
 

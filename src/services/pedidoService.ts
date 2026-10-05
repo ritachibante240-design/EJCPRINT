@@ -40,6 +40,7 @@ export type Pedido = {
   total: number;
   documento_nome: string | null;
   documento_uri: string | null;
+  documento_remoto_id: string | null;
   estado: string;
   data_criacao: string;
   valor_pago: number;

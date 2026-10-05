@@ -2,12 +2,12 @@ import { BadRequestException, Injectable, NotFoundException, StreamableFile } fr
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, extname } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProofStorageService } from './proof-storage.service';
+import { ObjectStorageService } from '../storage/object-storage.service';
 @Injectable()
 export class PaymentsService {
   private proofHashBackfill: Promise<void> | null = null;
 
-  constructor(private readonly prisma: PrismaService, private readonly proofStorage: ProofStorageService) {}
+  constructor(private readonly prisma: PrismaService, private readonly proofStorage: ObjectStorageService) {}
   async create(input: { externalReference: string; orderId: string; amountCents: number; method: string; type: string; reference?: string }, proof?: Express.Multer.File) {
     if (input.method.trim() !== 'Dinheiro' && !proof) throw new BadRequestException('O comprovativo é obrigatório para este método de pagamento.');
     const reference = input.externalReference.trim();
