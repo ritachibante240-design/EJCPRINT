@@ -8,15 +8,8 @@ import {
   PagamentoPendente,
   rejeitarPagamento,
 } from '../../services/pagamentoService';
-import {
-  sincronizarPagamentosPendentes,
-  sincronizarPagamentosRecebidos,
-} from '../../services/sincronizacaoPagamentoService';
-import {
-  sincronizarPedidosPendentes,
-  sincronizarPedidosRecebidos,
-} from '../../services/sincronizacaoPedidoService';
 import React, { useCallback, useState } from 'react';
+import { sincronizarTudoPendentes } from '../../services/sincronizacaoSeguraService';
 import {
   ActivityIndicator,
   FlatList,
@@ -39,10 +32,7 @@ export default function PagamentosPendentesScreen() {
     setAtualizando(true);
     let erroSincronizacao: unknown;
     try {
-      await sincronizarPedidosPendentes();
-      await sincronizarPedidosRecebidos();
-      await sincronizarPagamentosPendentes();
-      await sincronizarPagamentosRecebidos();
+      await sincronizarTudoPendentes(3, 1200);
     } catch (erro) {
       erroSincronizacao = erro;
       console.warn('Não foi possível atualizar pagamentos do servidor.', erro);

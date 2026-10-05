@@ -9,10 +9,9 @@ import {
 import AppNavigator from './src/navigation/AppNavigator';
 import { iniciarBancoDados } from './src/database/database';
 import { AppAlertProvider } from './src/components/AppAlert';
-import { sincronizarPedidosPendentes } from './src/services/sincronizacaoPedidoService';
-import { sincronizarPagamentosPendentes } from './src/services/sincronizacaoPagamentoService';
 import WebContainer from './src/components/WebContainer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { sincronizarTudoPendentes } from './src/services/sincronizacaoSeguraService';
 
 export default function App() {
   const [bancoPronto, setBancoPronto] = useState(false);
@@ -24,9 +23,7 @@ export default function App() {
 
     iniciarBancoDados()
       .then(() => {
-        void sincronizarPedidosPendentes()
-          .then(sincronizarPagamentosPendentes)
-          .catch(() => undefined);
+        void sincronizarTudoPendentes(3, 1200).catch(() => undefined);
         if (!cancelado) {
           setBancoPronto(true);
           setErroBanco(null);

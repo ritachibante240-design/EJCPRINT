@@ -21,10 +21,7 @@ import {
   calcularResumoPedido,
   Pedido,
 } from "../../services/pedidoService";
-import {
-  sincronizarPedidosPendentes,
-  sincronizarPedidosRecebidos,
-} from "../../services/sincronizacaoPedidoService";
+import { sincronizarTudoPendentes } from "../../services/sincronizacaoSeguraService";
 import { obterNomeEstado, obterProximaAcao } from "../../utils/estadoPedido";
 import { Ionicons } from "@expo/vector-icons";
 import { abrirArquivoPedido } from "../../services/arquivoRemotoService";
@@ -52,8 +49,7 @@ export default function PedidosScreen() {
     setAtualizando(true);
     let erroSincronizacao: unknown;
     try {
-      await sincronizarPedidosPendentes();
-      await sincronizarPedidosRecebidos();
+      await sincronizarTudoPendentes(3, 1200);
     } catch (erro) {
       erroSincronizacao = erro;
       console.warn('Não foi possível atualizar os pedidos do servidor.', erro);
