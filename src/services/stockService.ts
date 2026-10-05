@@ -1,4 +1,50 @@
 import { db } from '../database/database';
+import { obterTokenAdministrador } from './adminAuthService';
+
+function obterUrlApi() {
+  const url = process.env.EXPO_PUBLIC_API_URL?.trim();
+  return url ? url.replace(/\/$/, '') : null;
+}
+
+async function fetchRemoto<T>(path: string, init?: RequestInit): Promise<T | null> {
+  const api = obterUrlApi();
+  if (!api) return null;
+
+  const token = await obterTokenAdministrador();
+  if (!token) return null;
+
+  try {
+    const resposta = await fetch(`${api}${path}`, {
+      ...init,
+      headers: {
+        ...(init?.headers ?? {}),
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!resposta.ok) {
+      throw new Error(`HTTP ${resposta.status}`);
+    }
+
+    return (await resposta.json()) as T;
+  } catch (error) {
+    console.warn('[stockService] fallback para SQLite:', error);
+    return null;
+  }
+}
+
+function normalizarItemRemoto(item: any): ItemStock {
+  return {
+    id: Number(item.id),
+    nome: item.name ?? item.nome ?? '',
+    categoria: item.category ?? item.categoria ?? '',
+    unidade: item.unit ?? item.unidade ?? '',
+    quantidade: Number(item.quantity ?? item.quantidade ?? 0),
+    stock_minimo: Number(item.minimumQuantity ?? item.stock_minimo ?? 0),
+    custo_medio: Number(item.averageUnitCost ?? item.custo_medio ?? 0),
+    data_atualizacao: item.updatedAt ?? item.data_atualizacao ?? new Date().toISOString(),
+  };
+}
 
 export type ItemStock = {
   id: number;
@@ -49,6 +95,15 @@ export async function criarItemStock(
     );
   }
 
+  const ehPapelA4 = nomeNormalizado === 'papel a4';
+  if (
+    (ehPapelA4 || unidade.trim().toLocaleLowerCase() === 'folhas') &&
+    (!Number.isSafeInteger(quantidade) ||
+      !Number.isSafeInteger(stockMinimo))
+  ) {
+    throw new Error('As quantidades de folhas devem ser números inteiros.');
+  }
+
   const existente = await db.getFirstAsync<{ id: number }>(
     `
       SELECT id
@@ -63,14 +118,21 @@ export async function criarItemStock(
     throw new Error('Já existe um material com esse nome no stock.');
   }
 
-  const ehPapelA4 = nomeNormalizado === 'papel a4';
+  const itemRemoto = await fetchRemoto<any>('/inventory/items', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: ehPapelA4 ? 'Papel A4' : nome.trim(),
+      category: ehPapelA4 ? 'Papel' : categoria.trim(),
+      unit: ehPapelA4 ? 'folhas' : unidade.trim(),
+      quantity: quantidade,
+      minimumQuantity: stockMinimo,
+      externalReference: `stock-create-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
 
-  if (
-    (ehPapelA4 || unidade.trim().toLocaleLowerCase() === 'folhas') &&
-    (!Number.isSafeInteger(quantidade) ||
-      !Number.isSafeInteger(stockMinimo))
-  ) {
-    throw new Error('As quantidades de folhas devem ser números inteiros.');
+  if (itemRemoto) {
+    return normalizarItemRemoto(itemRemoto);
   }
 
   await db.runAsync(
@@ -95,6 +157,11 @@ export async function criarItemStock(
 }
 
 export async function listarStock() {
+  const itensRemotos = await fetchRemoto<any[]>('/inventory/items');
+  if (itensRemotos) {
+    return itensRemotos.map(normalizarItemRemoto);
+  }
+
   return await db.getAllAsync<ItemStock>(
     `
       SELECT *
@@ -161,6 +228,20 @@ export async function registrarCompraStock(
 
   if (!Number.isSafeInteger(valorCentavos) || valorCentavos <= 0) {
     throw new Error('O valor da compra é inválido.');
+  }
+
+  const compraRemota = await fetchRemoto<any>(`/inventory/items/${stockId}/purchases`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      quantity: quantidade,
+      amountCents: valorCentavos,
+      externalReference: `purchase-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
+
+  if (compraRemota) {
+    return normalizarItemRemoto(compraRemota);
   }
 
   await db.withExclusiveTransactionAsync(async (transaction) => {
@@ -283,6 +364,21 @@ export async function removerStock(
     throw new Error('Quantidade inválida.');
   }
 
+  const remocaoRemota = await fetchRemoto<any>(`/inventory/items/${id}/adjustments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      direction: 'REMOVE',
+      quantity: quantidade,
+      reason: 'Remoção manual de stock',
+      externalReference: `stock-remove-${id}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
+
+  if (remocaoRemota) {
+    return normalizarItemRemoto(remocaoRemota);
+  }
+
   await db.withExclusiveTransactionAsync(async (transaction) => {
     const item = await transaction.getFirstAsync<ItemStock>(
       'SELECT * FROM stock WHERE id = ?',
@@ -324,6 +420,22 @@ export async function ajustarQuantidadeStock(
   if (!Number.isFinite(novaQuantidade) || novaQuantidade < 0) {
     throw new Error('A quantidade não pode ser negativa.');
   }
+
+  const ajusteRemoto = await fetchRemoto<any>(`/inventory/items/${stockId}/adjustments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      direction: 'SET',
+      quantity: novaQuantidade,
+      reason: motivo.trim() || 'Ajuste de inventário',
+      externalReference: `stock-adjust-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
+
+  if (ajusteRemoto) {
+    return normalizarItemRemoto(ajusteRemoto);
+  }
+
   await db.withExclusiveTransactionAsync(async (transaction) => {
     const item = await transaction.getFirstAsync<ItemStock>(
       'SELECT * FROM stock WHERE id = ?', stockId
@@ -354,6 +466,19 @@ export async function definirCustoInicialStock(
 ) {
   if (!Number.isFinite(valorTotalStock) || valorTotalStock <= 0) {
     throw new Error('Informe o valor real do stock existente.');
+  }
+
+  const custoRemoto = await fetchRemoto<any>(`/inventory/items/${stockId}/initial-cost`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      amountCents: Math.round((valorTotalStock + Number.EPSILON) * 100),
+      externalReference: `stock-initial-cost-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
+
+  if (custoRemoto) {
+    return normalizarItemRemoto(custoRemoto);
   }
 
   await db.withExclusiveTransactionAsync(async (transaction) => {
@@ -389,6 +514,21 @@ export async function registrarDesperdicio(
 
   if (!motivo.trim()) {
     throw new Error('Informe o motivo do desperdício.');
+  }
+
+  const desperdicioRemoto = await fetchRemoto<any>(`/inventory/items/${stockId}/waste`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      quantity: quantidade,
+      reason: motivo.trim(),
+      orderId: pedidoId ? String(pedidoId) : undefined,
+      externalReference: `stock-waste-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
+
+  if (desperdicioRemoto) {
+    return normalizarItemRemoto(desperdicioRemoto);
   }
 
   await db.withExclusiveTransactionAsync(async (transaction) => {
@@ -462,6 +602,21 @@ export async function registrarPerdaStock(
 }
 
 export async function listarPerdasStock() {
+  const movimentosRemotos = await fetchRemoto<any[]>('/inventory/movements');
+  if (movimentosRemotos) {
+    return movimentosRemotos
+      .filter((movimento) => movimento.type === 'DESPERDICIO')
+      .map((movimento) => ({
+        id: Number(movimento.id),
+        stock_id: Number(movimento.stockItemId ?? movimento.stock_id ?? 0),
+        material: movimento.stockItem?.name ?? 'Material',
+        quantidade: Number(movimento.quantity ?? 0),
+        unidade: movimento.stockItem?.unit ?? '',
+        motivo: movimento.reason ?? 'Desperdício',
+        data_criacao: movimento.createdAt ?? new Date().toISOString(),
+      }));
+  }
+
   return await db.getAllAsync<PerdaStock>(
     `
       SELECT id, stock_id, material, quantidade, unidade, motivo, data_criacao

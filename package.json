@@ -41,7 +41,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "migrate:local-db": "node scripts/migrate-local-db.mjs"
   },
   "private": true
 }

@@ -86,6 +86,28 @@ administrativas importam pagamentos pendentes remotos antes de os listar; ao
 aprovar ou rejeitar, a decisão é sincronizada de volta ao servidor. Os estados
 do pedido só avançam para produção/entrega depois das regras de pagamento atuais.
 
+## Migração manual de dados locais
+
+Para migrar o stock e as despesas que continuam guardados em SQLite local, use o
+script de importação manual:
+
+```bash
+cd ..
+ADMIN_TOKEN="<token-admin>" EXPO_PUBLIC_API_URL="https://<dominio-publico>/api" \
+node scripts/migrate-local-db.mjs --db "C:/caminho/para/ejcprint.db"
+```
+
+Também pode usar:
+
+```bash
+node scripts/migrate-local-db.mjs --db "C:/caminho/para/ejcprint.db" --api "https://<dominio-publico>/api" --token "<token-admin>"
+```
+
+Este utilitário importa apenas registos de `stock` e `despesas` para o backend,
+com `externalReference` determinístico para evitar duplicados. Não elimina o
+SQLite local; apenas centraliza os dados históricos mais sensíveis de forma
+segura e reexecutável.
+
 ## Acesso administrativo
 
 `POST /api/payments` permanece público para permitir que o cliente comunique

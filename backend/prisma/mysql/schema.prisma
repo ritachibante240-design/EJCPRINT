@@ -45,6 +45,7 @@ model Order {
   documents         Document[]
   client            User?       @relation(fields: [clientId], references: [id])
   payments          Payment[]
+  stockMovements    StockMovement[]
 
   @@index([clientId], map: "Order_clientId_fkey")
 }
@@ -82,6 +83,54 @@ model Document {
   order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId], map: "Document_orderId_fkey")
+}
+
+model StockItem {
+  id              String          @id @default(cuid())
+  name            String
+  normalizedName  String          @unique
+  category        String
+  unit            String
+  quantity        Float           @default(0)
+  minimumQuantity Float           @default(0)
+  averageUnitCost Float           @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  movements       StockMovement[]
+}
+
+model StockMovement {
+  id                String      @id @default(cuid())
+  externalReference String?     @unique
+  stockItemId       String
+  orderId           String?
+  type              String
+  quantity          Float
+  amountCents       Int?
+  unitCost          Float?
+  reason            String?
+  createdAt         DateTime    @default(now())
+  expense           Expense?
+  stockItem         StockItem   @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  order             Order?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([stockItemId, createdAt])
+  @@index([orderId])
+}
+
+model Expense {
+  id                String         @id @default(cuid())
+  externalReference String?        @unique
+  description       String
+  category          String
+  type              String
+  amountCents       Int
+  stockMovementId  String?        @unique
+  createdAt         DateTime       @default(now())
+  stockMovement    StockMovement? @relation(fields: [stockMovementId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([type, createdAt])
 }
 
 enum UserRole {
