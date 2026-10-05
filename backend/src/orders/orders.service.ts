@@ -44,7 +44,10 @@ export class OrdersService {
 
   list() {
     return this.prisma.order.findMany({
-      include: { documents: true },
+      include: {
+        documents: true,
+        payments: { select: { amountCents: true, status: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }

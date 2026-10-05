@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  RefreshControl,
 } from "react-native";
 
 import { useFocusEffect } from "@react-navigation/native";
@@ -20,6 +21,10 @@ import {
   calcularResumoPedido,
   Pedido,
 } from "../../services/pedidoService";
+import {
+  sincronizarPedidosPendentes,
+  sincronizarPedidosRecebidos,
+} from "../../services/sincronizacaoPedidoService";
 import { obterNomeEstado, obterProximaAcao } from "../../utils/estadoPedido";
 import { Ionicons } from "@expo/vector-icons";
 import { File } from "expo-file-system";
@@ -37,27 +42,44 @@ export default function PedidosScreen() {
   const { isDesktop } = useResponsiveContent(20);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [atualizando, setAtualizando] = useState(false);
   const [pedidoAberto, setPedidoAberto] = useState<number | null>(null);
   const [pedidoProcessando, setPedidoProcessando] = useState<number | null>(
     null,
   );
 
-  async function carregarPedidos() {
+  async function carregarPedidos(mostrarErro = true) {
+    setAtualizando(true);
+    let erroSincronizacao: unknown;
     try {
-      const dados = await listarPedidos();
-      setPedidos(dados);
+      await sincronizarPedidosPendentes();
+      await sincronizarPedidosRecebidos();
+    } catch (erro) {
+      erroSincronizacao = erro;
+      console.warn('Não foi possível atualizar os pedidos do servidor.', erro);
+    }
+
+    try {
+      setPedidos(await listarPedidos());
     } catch (erro) {
       console.error(erro);
-
-      showAppAlert("Erro", "Não foi possível carregar os pedidos.");
+      showAppAlert("Erro", "Não foi possível carregar os pedidos locais.");
     } finally {
       setCarregando(false);
+      setAtualizando(false);
+    }
+
+    if (erroSincronizacao && mostrarErro) {
+      showAppAlert(
+        "Pedidos não atualizados",
+        "A lista local foi mantida, mas não foi possível atualizar os pedidos do servidor. Verifique a ligação e tente atualizar novamente."
+      );
     }
   }
 
   useFocusEffect(
     useCallback(() => {
-      carregarPedidos();
+      void carregarPedidos(false);
     }, []),
   );
 
@@ -71,7 +93,7 @@ export default function PedidosScreen() {
         await atualizarEstadoPedido(pedido.id, novoEstado);
       }
 
-      await carregarPedidos();
+      await carregarPedidos(false);
 
       showAppAlert(
         "Sucesso",
@@ -536,6 +558,9 @@ export default function PedidosScreen() {
     <FlatList
       style={styles.container}
       contentContainerStyle={[styles.content, isDesktop && { maxWidth: 1000, width: '100%', alignSelf: 'center' }]}
+      refreshControl={
+        <RefreshControl refreshing={atualizando} onRefresh={() => void carregarPedidos()} />
+      }
       data={pedidos}
       keyExtractor={(item) => item.id.toString()}
       renderItem={renderPedidoSimples}

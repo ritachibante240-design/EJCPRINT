@@ -261,7 +261,7 @@ export async function atualizarEstadoPedido(
     }
 
     await transaction.runAsync(
-      'UPDATE pedidos SET estado = ? WHERE id = ?',
+      "UPDATE pedidos SET estado = ?, sincronizacao_estado = 'PENDENTE' WHERE id = ?",
       novoEstado,
       id
     );
@@ -312,7 +312,11 @@ export async function iniciarImpressao(
 
   const usaPapel = ['Impressão P/B', 'Fotocópia P/B', 'Colorida simples', 'Colorida com imagens'].includes(pedido.servico);
   if (!usaPapel) {
-    await db.runAsync('UPDATE pedidos SET estado = ? WHERE id = ?', 'Em impressão', pedidoId);
+    await db.runAsync(
+      "UPDATE pedidos SET estado = ?, sincronizacao_estado = 'PENDENTE' WHERE id = ?",
+      'Em impressão',
+      pedidoId
+    );
     return;
   }
 
@@ -415,6 +419,7 @@ export async function iniciarImpressao(
       `
         UPDATE pedidos
         SET estado = ?,
+          sincronizacao_estado = 'PENDENTE',
             stock_descontado = 1,
             custo_papel_unitario = ?,
             custo_papel = ?,
