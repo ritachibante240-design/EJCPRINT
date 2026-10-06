@@ -93,6 +93,7 @@ export default function StockScreen() {
       setPerdas(historicoPerdas);
     } catch (erro) {
       console.error(erro);
+      showAppAlert('Stock indisponível', erro instanceof Error ? erro.message : 'Não foi possível carregar o stock online.');
     }
   }
 

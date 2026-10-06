@@ -2,6 +2,7 @@ import { db } from '../database/database';
 import { calcularImpressao } from '../utils/calcularImpressao';
 import { obterCustoTintaPorPagina } from '../utils/custosImpressao';
 import { sincronizarPedidoLocal } from './sincronizacaoPedidoService';
+import { obterTokenAdministrador } from './adminAuthService';
 
 export type NovoPedido = {
   cliente: string;
@@ -297,145 +298,56 @@ export async function verificarSinalPedido(pedidoId: number) {
 export async function iniciarImpressao(
   pedidoId: number
 ) {
-  await db.withExclusiveTransactionAsync(async (transaction) => {
-    const pedido = await transaction.getFirstAsync<Pedido>(
-      `
-        SELECT *
-        FROM pedidos
-        WHERE id = ?
-      `,
-      pedidoId
-    );
+  let pedido = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', pedidoId);
+  if (!pedido) throw new Error('Pedido não encontrado.');
 
-  if (!pedido) {
-    throw new Error('Pedido não encontrado.');
+  if (!pedido.remoto_id) {
+    await sincronizarPedidoLocal(pedido);
+    pedido = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', pedidoId);
   }
+  if (!pedido?.remoto_id) {
+    throw new Error('O pedido ainda não está sincronizado com o backend. Verifique a ligação e tente novamente.');
+  }
+
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
+  if (!apiUrl) throw new Error('A URL do backend não está configurada.');
+  const token = await obterTokenAdministrador();
+  if (!token) throw new Error('Inicie sessão como administrador para iniciar a impressão.');
 
   const usaPapel = ['Impressão P/B', 'Fotocópia P/B', 'Colorida simples', 'Colorida com imagens'].includes(pedido.servico);
-  if (!usaPapel) {
-    await db.runAsync(
-      "UPDATE pedidos SET estado = ?, sincronizacao_estado = 'PENDENTE' WHERE id = ?",
-      'Em impressão',
-      pedidoId
-    );
-    return;
+  const externalReference = `start-print-${pedido.sync_chave ?? pedido.remoto_id}`;
+  const response = await fetch(`${apiUrl}/inventory/orders/${pedido.remoto_id}/start-print`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ externalReference }),
+  });
+  const body = await response.json().catch(() => null) as {
+    message?: unknown;
+    stockItem?: { averageUnitCost?: number } | null;
+  } | null;
+  if (!response.ok) {
+    const message = typeof body?.message === 'string' ? body.message : `API respondeu ${response.status}.`;
+    throw new Error(message);
   }
 
-    if (pedido.estado !== 'Em preparação') {
-      throw new Error(
-        'A impressão só pode começar quando o pedido estiver em preparação.'
-      );
-    }
-
-    if (pedido.stock_descontado === 1) {
-      throw new Error('O papel deste pedido já foi reservado.');
-    }
-
-    if (
-      !Number.isInteger(pedido.folhas_necessarias) ||
-      pedido.folhas_necessarias <= 0
-    ) {
-      throw new Error(
-        'Este pedido não possui um cálculo válido de folhas.'
-      );
-    }
-
-    const papel = await transaction.getFirstAsync<{
-      id: number;
-      quantidade: number;
-      custo_medio: number;
-    }>(
-      `
-        SELECT id, quantidade, custo_medio
-        FROM stock
-        WHERE LOWER(nome) = LOWER(?)
-        LIMIT 1
-      `,
-      'Papel A4'
-    );
-
-    if (!papel) {
-      throw new Error(
-        'Papel A4 não está cadastrado no stock.'
-      );
-    }
-
-    if (papel.quantidade < pedido.folhas_necessarias) {
-      throw new Error(
-        `Stock insuficiente. Necessário: ${pedido.folhas_necessarias} folhas. Disponível: ${papel.quantidade} folhas.`
-      );
-    }
-
-    const custoUnitarioPapel = papel.custo_medio ?? 0;
-    const custoTotalPapel =
-      pedido.folhas_necessarias * custoUnitarioPapel;
-    const totalPaginasImpressas =
-      pedido.numero_paginas * pedido.numero_copias;
-    const custoTintaPorPagina = obterCustoTintaPorPagina(
-      pedido.servico
-    );
-    const custoTotalTinta =
-      totalPaginasImpressas * custoTintaPorPagina;
-
-    const resultado = await transaction.runAsync(
-      `
-        UPDATE stock
-        SET quantidade = quantidade - ?,
-            data_atualizacao = ?
-        WHERE id = ? AND quantidade >= ?
-      `,
-      pedido.folhas_necessarias,
-      new Date().toISOString(),
-      papel.id,
-      pedido.folhas_necessarias
-    );
-
-    if (resultado.changes !== 1) {
-      throw new Error(
-        'Não foi possível reservar o papel. Verifique o stock.'
-      );
-    }
-
-    await transaction.runAsync(
-      `
-        INSERT INTO movimentos_stock (
-          stock_id,
-          pedido_id,
-          tipo,
-          quantidade,
-          motivo,
-          data_criacao
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-      `,
-      papel.id,
-      pedido.id,
-      'CONSUMO_PEDIDO',
-      pedido.folhas_necessarias,
-      `Impressão do pedido ${pedido.numero}`,
-      new Date().toISOString()
-    );
-
-    await transaction.runAsync(
-      `
-        UPDATE pedidos
-        SET estado = ?,
-          sincronizacao_estado = 'PENDENTE',
-            stock_descontado = 1,
-            custo_papel_unitario = ?,
-            custo_papel = ?,
-            custo_tinta_por_pagina = ?,
-            custo_tinta = ?
-        WHERE id = ?
-      `,
-      'Em impressão',
-      custoUnitarioPapel,
-      custoTotalPapel,
-      custoTintaPorPagina,
-      custoTotalTinta,
-      pedidoId
-    );
-  });
+  const custoPapelUnitario = body?.stockItem?.averageUnitCost ?? 0;
+  const custoPapel = usaPapel ? pedido.folhas_necessarias * custoPapelUnitario : 0;
+  const custoTintaPorPagina = obterCustoTintaPorPagina(pedido.servico);
+  const custoTinta = pedido.numero_paginas * pedido.numero_copias * custoTintaPorPagina;
+  await db.runAsync(
+    `UPDATE pedidos
+     SET estado = ?, sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL,
+         stock_descontado = ?, custo_papel_unitario = ?, custo_papel = ?,
+         custo_tinta_por_pagina = ?, custo_tinta = ?
+     WHERE id = ?`,
+    'Em impressão',
+    usaPapel ? 1 : 0,
+    custoPapelUnitario,
+    custoPapel,
+    custoTintaPorPagina,
+    custoTinta,
+    pedidoId
+  );
 }
 
 export type EstatisticasPedidos = {
@@ -447,7 +359,49 @@ export type EstatisticasPedidos = {
   cancelados: number;
 };
 
+type ResumoRemotoPedidos = {
+  valorPedidosCents: number;
+  valorTotalInclCancelledCents: number;
+  recebidoCents: number;
+  porReceberCents: number;
+  totalPedidos: number;
+  entregues: number;
+  cancelados: number;
+  emProducao: number;
+};
+
+async function obterResumoRemotoPedidos() {
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
+  if (!apiUrl) return null;
+  const token = await obterTokenAdministrador();
+  if (!token) throw new Error('Inicie sessão como administrador para consultar os resumos online.');
+
+  const response = await fetch(`${apiUrl}/inventory/reports?period=GERAL`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const body = await response.json().catch(() => null) as (ResumoRemotoPedidos & { message?: unknown }) | null;
+  if (!response.ok) {
+    throw new Error(typeof body?.message === 'string' ? body.message : `API respondeu ${response.status}.`);
+  }
+  if (!body || !Number.isFinite(body.valorTotalInclCancelledCents) || !Number.isFinite(body.emProducao)) {
+    throw new Error('O backend precisa ser atualizado para fornecer os resumos do Dashboard.');
+  }
+  return body;
+}
+
 export async function obterEstatisticasPedidos(): Promise<EstatisticasPedidos> {
+  const remoto = await obterResumoRemotoPedidos();
+  if (remoto) {
+    return {
+      totalPedidos: remoto.totalPedidos,
+      pedidosPendentes: remoto.totalPedidos - remoto.entregues - remoto.cancelados,
+      pedidosEntregues: remoto.entregues,
+      emProducao: remoto.emProducao,
+      valorTotal: remoto.valorTotalInclCancelledCents / 100,
+      cancelados: remoto.cancelados,
+    };
+  }
+
   const resultado = await db.getFirstAsync<{
     totalPedidos: number;
     pedidosPendentes: number;
@@ -553,6 +507,15 @@ export type ResumoFinanceiro = {
 };
 
 export async function obterResumoFinanceiro(): Promise<ResumoFinanceiro> {
+  const remoto = await obterResumoRemotoPedidos();
+  if (remoto) {
+    return {
+      valorPedidos: remoto.valorPedidosCents / 100,
+      valorRecebido: remoto.recebidoCents / 100,
+      valorPendente: remoto.porReceberCents / 100,
+    };
+  }
+
   const resultado = await db.getFirstAsync<{
     valorPedidosCentavos: number;
     valorRecebidoCentavos: number;

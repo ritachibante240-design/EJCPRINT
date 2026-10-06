@@ -46,8 +46,12 @@ export default function DespesasScreen() {
 	const [despesas, setDespesas] = useState<Despesa[]>([]);
 
 	async function carregar() {
-		const dados = await listarDespesas();
-		setDespesas(dados);
+		try {
+			const dados = await listarDespesas();
+			setDespesas(dados);
+		} catch (erro) {
+			showAppAlert('Despesas indisponíveis', erro instanceof Error ? erro.message : 'Não foi possível carregar as despesas online.');
+		}
 	}
 
 	useFocusEffect(

@@ -11,7 +11,7 @@ async function fetchRemoto<T>(path: string): Promise<T | null> {
   if (!api) return null;
 
   const token = await obterTokenAdministrador();
-  if (!token) return null;
+  if (!token) throw new Error('Inicie sessão como administrador para consultar relatórios.');
 
   try {
     const resposta = await fetch(`${api}${path}`, {
@@ -24,8 +24,8 @@ async function fetchRemoto<T>(path: string): Promise<T | null> {
 
     return (await resposta.json()) as T;
   } catch (error) {
-    console.warn('[relatorioService] fallback para SQLite:', error);
-    return null;
+    console.warn('[relatorioService] falha ao contactar o backend:', error);
+    throw error instanceof Error ? error : new Error('Não foi possível consultar o relatório no backend.');
   }
 }
 

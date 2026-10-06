@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { showAppAlert } from '../../components/AppAlert';
 import { useResponsiveContent } from '../../hooks/useResponsive';
 import {
   MovimentoCaixa,
@@ -41,6 +42,8 @@ export default function CaixaScreen({ navigation }: any) {
       setSaldo(resumo.saldo);
       setPorReceber(resumo.porReceber);
       setMovimentos(lista);
+    } catch (error) {
+      showAppAlert('Caixa indisponível', error instanceof Error ? error.message : 'Não foi possível carregar os dados online.');
     } finally {
       setCarregando(false);
     }

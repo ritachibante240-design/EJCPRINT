@@ -6,12 +6,15 @@ function obterUrlApi() {
   return url ? url.replace(/\/$/, '') : null;
 }
 
-async function fetchRemoto<T>(path: string, init?: RequestInit): Promise<T | null> {
+async function fetchRemoto<T>(path: string, init?: RequestInit, obrigatorio = false): Promise<T | null> {
   const api = obterUrlApi();
-  if (!api) return null;
+  if (!api) {
+    if (obrigatorio) throw new Error('Configure a URL do backend para alterar o stock.');
+    return null;
+  }
 
   const token = await obterTokenAdministrador();
-  if (!token) return null;
+  if (!token) throw new Error('Inicie sessão como administrador para consultar ou alterar o stock.');
 
   try {
     const resposta = await fetch(`${api}${path}`, {
@@ -28,14 +31,20 @@ async function fetchRemoto<T>(path: string, init?: RequestInit): Promise<T | nul
 
     return (await resposta.json()) as T;
   } catch (error) {
-    console.warn('[stockService] fallback para SQLite:', error);
-    return null;
+    console.warn('[stockService] falha ao contactar o backend:', error);
+    throw error instanceof Error ? error : new Error('Não foi possível contactar o backend.');
   }
+}
+
+async function exigirStockRemoto<T>(path: string, init: RequestInit): Promise<T> {
+  const resultado = await fetchRemoto<T>(path, init, true);
+  if (resultado === null) throw new Error('O backend não devolveu o stock atualizado.');
+  return resultado;
 }
 
 function normalizarItemRemoto(item: any): ItemStock {
   return {
-    id: Number(item.id),
+    id: item.id,
     nome: item.name ?? item.nome ?? '',
     categoria: item.category ?? item.categoria ?? '',
     unidade: item.unit ?? item.unidade ?? '',
@@ -47,7 +56,7 @@ function normalizarItemRemoto(item: any): ItemStock {
 }
 
 export type ItemStock = {
-  id: number;
+  id: number | string;
   nome: string;
   categoria: string;
   unidade: string;
@@ -58,8 +67,8 @@ export type ItemStock = {
 };
 
 export type PerdaStock = {
-  id: number;
-  stock_id: number;
+  id: number | string;
+  stock_id: number | string;
   material: string;
   quantidade: number;
   unidade: string;
@@ -104,21 +113,7 @@ export async function criarItemStock(
     throw new Error('As quantidades de folhas devem ser números inteiros.');
   }
 
-  const existente = await db.getFirstAsync<{ id: number }>(
-    `
-      SELECT id
-      FROM stock
-      WHERE LOWER(TRIM(nome)) = LOWER(?)
-      LIMIT 1
-    `,
-    nome.trim()
-  );
-
-  if (existente) {
-    throw new Error('Já existe um material com esse nome no stock.');
-  }
-
-  const itemRemoto = await fetchRemoto<any>('/inventory/items', {
+  const itemRemoto = await exigirStockRemoto<any>('/inventory/items', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -130,30 +125,7 @@ export async function criarItemStock(
       externalReference: `stock-create-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     }),
   });
-
-  if (itemRemoto) {
-    return normalizarItemRemoto(itemRemoto);
-  }
-
-  await db.runAsync(
-    `
-      INSERT INTO stock (
-        nome,
-        categoria,
-        unidade,
-        quantidade,
-        stock_minimo,
-        data_atualizacao
-      )
-      VALUES (?, ?, ?, ?, ?, ?)
-    `,
-    ehPapelA4 ? 'Papel A4' : nome.trim(),
-    ehPapelA4 ? 'Papel' : categoria.trim(),
-    ehPapelA4 ? 'folhas' : unidade.trim(),
-    quantidade,
-    stockMinimo,
-    new Date().toISOString()
-  );
+  return normalizarItemRemoto(itemRemoto);
 }
 
 export async function listarStock() {
@@ -172,37 +144,30 @@ export async function listarStock() {
 }
 
 export async function obterPapelA4() {
-  return await db.getFirstAsync<ItemStock>(
-    `
-      SELECT *
-      FROM stock
-      WHERE LOWER(TRIM(nome)) = LOWER(?)
-      LIMIT 1
-    `,
-    'Papel A4'
-  );
+  const itens = await listarStock();
+  return itens.find((item) => item.nome.trim().toLocaleLowerCase() === 'papel a4') ?? null;
 }
 
 export async function adicionarStock(
-  id: number,
+  id: number | string,
   quantidade: number
 ) {
-  await db.runAsync(
-    `
-      UPDATE stock
-      SET
-        quantidade = quantidade + ?,
-        data_atualizacao = ?
-      WHERE id = ?
-    `,
-    quantidade,
-    new Date().toISOString(),
-    id
-  );
+  if (!Number.isFinite(quantidade) || quantidade <= 0) throw new Error('Quantidade inválida.');
+  const item = await exigirStockRemoto<any>(`/inventory/items/${id}/adjustments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      direction: 'ADD',
+      quantity: quantidade,
+      reason: 'Adição manual de stock',
+      externalReference: `stock-add-${id}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
+  return normalizarItemRemoto(item);
 }
 
 export async function registrarCompraStock(
-  stockId: number,
+  stockId: number | string,
   quantidade: number,
   valorTotal: number
 ) {
@@ -230,7 +195,7 @@ export async function registrarCompraStock(
     throw new Error('O valor da compra é inválido.');
   }
 
-  const compraRemota = await fetchRemoto<any>(`/inventory/items/${stockId}/purchases`, {
+  const compraRemota = await exigirStockRemoto<any>(`/inventory/items/${stockId}/purchases`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -239,132 +204,18 @@ export async function registrarCompraStock(
       externalReference: `purchase-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     }),
   });
-
-  if (compraRemota) {
-    return normalizarItemRemoto(compraRemota);
-  }
-
-  await db.withExclusiveTransactionAsync(async (transaction) => {
-    const item = await transaction.getFirstAsync<ItemStock>(
-      `
-        SELECT *
-        FROM stock
-        WHERE id = ?
-      `,
-      stockId
-    );
-
-    if (!item) {
-      throw new Error('Material não encontrado.');
-    }
-
-    if (
-      item.unidade.trim().toLocaleLowerCase() === 'folhas' &&
-      !Number.isSafeInteger(quantidade)
-    ) {
-      throw new Error(
-        'A quantidade de folhas deve ser um número inteiro.'
-      );
-    }
-
-    const quantidadeAtual = item.quantidade;
-    const custoMedioAtual = item.custo_medio ?? 0;
-    const valorStockAtual = quantidadeAtual * custoMedioAtual;
-    const novaQuantidade = quantidadeAtual + quantidade;
-    if (!Number.isFinite(novaQuantidade) || novaQuantidade <= 0) {
-      throw new Error('A quantidade total do stock é inválida.');
-    }
-    const novoValorStock = valorStockAtual + valorCentavos / 100;
-    const novoCustoMedio = novoValorStock / novaQuantidade;
-
-    const agora = new Date().toISOString();
-    const descricao = `Compra de ${item.nome}`;
-
-    const atualizacao = await transaction.runAsync(
-      `
-        UPDATE stock
-        SET quantidade = ?,
-            custo_medio = ?,
-            data_atualizacao = ?
-        WHERE id = ?
-      `,
-      novaQuantidade,
-      novoCustoMedio,
-      agora,
-      stockId
-    );
-
-    if (atualizacao.changes !== 1) {
-      throw new Error('Não foi possível atualizar o stock.');
-    }
-
-    await transaction.runAsync(
-      `
-        INSERT INTO despesas (
-          descricao,
-          categoria,
-          tipo,
-          valor,
-          data_criacao
-        )
-        VALUES (?, ?, ?, ?, ?)
-      `,
-      descricao,
-      item.categoria,
-      'COMPRA_STOCK',
-      valorCentavos / 100,
-      agora
-    );
-
-    await transaction.runAsync(
-      `
-        INSERT INTO compras_stock (
-          stock_id,
-          descricao,
-          quantidade,
-          valor_total,
-          data_criacao
-        )
-        VALUES (?, ?, ?, ?, ?)
-      `,
-      stockId,
-      descricao,
-      quantidade,
-      valorCentavos / 100,
-      agora
-    );
-
-    await transaction.runAsync(
-      `
-        INSERT INTO movimentos_stock (
-          stock_id,
-          pedido_id,
-          tipo,
-          quantidade,
-          motivo,
-          data_criacao
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-      `,
-      stockId,
-      null,
-      'ENTRADA_COMPRA',
-      quantidade,
-      descricao,
-      agora
-    );
-  });
+  return normalizarItemRemoto(compraRemota);
 }
 
 export async function removerStock(
-  id: number,
+  id: number | string,
   quantidade: number
 ) {
   if (!Number.isFinite(quantidade) || quantidade <= 0) {
     throw new Error('Quantidade inválida.');
   }
 
-  const remocaoRemota = await fetchRemoto<any>(`/inventory/items/${id}/adjustments`, {
+  const remocaoRemota = await exigirStockRemoto<any>(`/inventory/items/${id}/adjustments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -374,46 +225,11 @@ export async function removerStock(
       externalReference: `stock-remove-${id}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     }),
   });
-
-  if (remocaoRemota) {
-    return normalizarItemRemoto(remocaoRemota);
-  }
-
-  await db.withExclusiveTransactionAsync(async (transaction) => {
-    const item = await transaction.getFirstAsync<ItemStock>(
-      'SELECT * FROM stock WHERE id = ?',
-      id
-    );
-
-    if (!item) {
-      throw new Error('Material não encontrado.');
-    }
-
-    if (
-      item.unidade.trim().toLocaleLowerCase() === 'folhas' &&
-      !Number.isSafeInteger(quantidade)
-    ) {
-      throw new Error('A quantidade de folhas deve ser um número inteiro.');
-    }
-
-    const resultado = await transaction.runAsync(
-      `UPDATE stock
-       SET quantidade = quantidade - ?, data_atualizacao = ?
-       WHERE id = ? AND quantidade >= ?`,
-      quantidade,
-      new Date().toISOString(),
-      id,
-      quantidade
-    );
-
-    if (resultado.changes !== 1) {
-      throw new Error('Stock insuficiente.');
-    }
-  });
+  return normalizarItemRemoto(remocaoRemota);
 }
 
 export async function ajustarQuantidadeStock(
-  stockId: number,
+  stockId: number | string,
   novaQuantidade: number,
   motivo: string
 ) {
@@ -421,7 +237,7 @@ export async function ajustarQuantidadeStock(
     throw new Error('A quantidade não pode ser negativa.');
   }
 
-  const ajusteRemoto = await fetchRemoto<any>(`/inventory/items/${stockId}/adjustments`, {
+  const ajusteRemoto = await exigirStockRemoto<any>(`/inventory/items/${stockId}/adjustments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -431,44 +247,18 @@ export async function ajustarQuantidadeStock(
       externalReference: `stock-adjust-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     }),
   });
-
-  if (ajusteRemoto) {
-    return normalizarItemRemoto(ajusteRemoto);
-  }
-
-  await db.withExclusiveTransactionAsync(async (transaction) => {
-    const item = await transaction.getFirstAsync<ItemStock>(
-      'SELECT * FROM stock WHERE id = ?', stockId
-    );
-    if (!item) throw new Error('Material não encontrado.');
-    if (item.unidade.toLowerCase() === 'folhas' && !Number.isSafeInteger(novaQuantidade)) {
-      throw new Error('A quantidade de folhas deve ser um número inteiro.');
-    }
-    const diferenca = novaQuantidade - item.quantidade;
-    if (diferenca === 0) throw new Error('A quantidade informada é igual ao stock atual.');
-    const agora = new Date().toISOString();
-    await transaction.runAsync(
-      'UPDATE stock SET quantidade = ?, data_atualizacao = ? WHERE id = ?',
-      novaQuantidade, agora, stockId
-    );
-    await transaction.runAsync(
-      `INSERT INTO movimentos_stock (stock_id, pedido_id, tipo, quantidade, motivo, data_criacao)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      stockId, null, diferenca > 0 ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO',
-      Math.abs(diferenca), motivo.trim() || 'Ajuste de inventário', agora
-    );
-  });
+  return normalizarItemRemoto(ajusteRemoto);
 }
 
 export async function definirCustoInicialStock(
-  stockId: number,
+  stockId: number | string,
   valorTotalStock: number
 ) {
   if (!Number.isFinite(valorTotalStock) || valorTotalStock <= 0) {
     throw new Error('Informe o valor real do stock existente.');
   }
 
-  const custoRemoto = await fetchRemoto<any>(`/inventory/items/${stockId}/initial-cost`, {
+  const custoRemoto = await exigirStockRemoto<any>(`/inventory/items/${stockId}/initial-cost`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -476,32 +266,11 @@ export async function definirCustoInicialStock(
       externalReference: `stock-initial-cost-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     }),
   });
-
-  if (custoRemoto) {
-    return normalizarItemRemoto(custoRemoto);
-  }
-
-  await db.withExclusiveTransactionAsync(async (transaction) => {
-    const item = await transaction.getFirstAsync<ItemStock>(
-      'SELECT * FROM stock WHERE id = ?',
-      stockId
-    );
-    if (!item) throw new Error('Material não encontrado.');
-    if (item.quantidade <= 0) throw new Error('Este material não possui stock disponível.');
-    if ((item.custo_medio ?? 0) > 0) throw new Error('O custo deste material já foi definido.');
-
-    const custoMedio = valorTotalStock / item.quantidade;
-    await transaction.runAsync(
-      `UPDATE stock SET custo_medio = ?, data_atualizacao = ? WHERE id = ?`,
-      custoMedio,
-      new Date().toISOString(),
-      stockId
-    );
-  });
+  return normalizarItemRemoto(custoRemoto);
 }
 
 export async function registrarDesperdicio(
-  stockId: number,
+  stockId: number | string,
   quantidade: number,
   motivo: string,
   pedidoId?: number
@@ -516,82 +285,33 @@ export async function registrarDesperdicio(
     throw new Error('Informe o motivo do desperdício.');
   }
 
-  const desperdicioRemoto = await fetchRemoto<any>(`/inventory/items/${stockId}/waste`, {
+  let pedidoRemotoId: string | undefined;
+  if (pedidoId) {
+    const pedido = await db.getFirstAsync<{ remoto_id: string | null }>(
+      'SELECT remoto_id FROM pedidos WHERE id = ?',
+      pedidoId
+    );
+    if (!pedido?.remoto_id) {
+      throw new Error('Sincronize o pedido antes de associar a perda de stock.');
+    }
+    pedidoRemotoId = pedido.remoto_id;
+  }
+
+  const desperdicioRemoto = await exigirStockRemoto<any>(`/inventory/items/${stockId}/waste`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       quantity: quantidade,
       reason: motivo.trim(),
-      orderId: pedidoId ? String(pedidoId) : undefined,
+      orderId: pedidoRemotoId,
       externalReference: `stock-waste-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     }),
   });
-
-  if (desperdicioRemoto) {
-    return normalizarItemRemoto(desperdicioRemoto);
-  }
-
-  await db.withExclusiveTransactionAsync(async (transaction) => {
-    const item = await transaction.getFirstAsync<ItemStock>(
-      `
-        SELECT *
-        FROM stock
-        WHERE id = ?
-      `,
-      stockId
-    );
-
-    if (!item) {
-      throw new Error('Material não encontrado.');
-    }
-
-    if (item.quantidade < quantidade) {
-      throw new Error(
-        `Stock insuficiente. Disponível: ${item.quantidade} ${item.unidade}.`
-      );
-    }
-
-    const resultado = await transaction.runAsync(
-      `
-        UPDATE stock
-        SET quantidade = quantidade - ?,
-            data_atualizacao = ?
-        WHERE id = ? AND quantidade >= ?
-      `,
-      quantidade,
-      new Date().toISOString(),
-      stockId,
-      quantidade
-    );
-
-    if (resultado.changes !== 1) {
-      throw new Error('Não foi possível atualizar o stock.');
-    }
-
-    await transaction.runAsync(
-      `
-        INSERT INTO movimentos_stock (
-          stock_id,
-          pedido_id,
-          tipo,
-          quantidade,
-          motivo,
-          data_criacao
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-      `,
-      stockId,
-      pedidoId ?? null,
-      'DESPERDICIO',
-      quantidade,
-      motivo.trim(),
-      new Date().toISOString()
-    );
-  });
+  return normalizarItemRemoto(desperdicioRemoto);
 }
 
 export async function registrarPerdaStock(
-  id: number,
+  id: number | string,
   quantidade: number
 ) {
   await registrarDesperdicio(
@@ -607,8 +327,8 @@ export async function listarPerdasStock() {
     return movimentosRemotos
       .filter((movimento) => movimento.type === 'DESPERDICIO')
       .map((movimento) => ({
-        id: Number(movimento.id),
-        stock_id: Number(movimento.stockItemId ?? movimento.stock_id ?? 0),
+        id: movimento.id,
+        stock_id: movimento.stockItemId ?? movimento.stock_id ?? 0,
         material: movimento.stockItem?.name ?? 'Material',
         quantidade: Number(movimento.quantity ?? 0),
         unidade: movimento.stockItem?.unit ?? '',

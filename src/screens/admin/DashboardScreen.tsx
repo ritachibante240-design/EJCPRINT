@@ -11,6 +11,7 @@ import {
 
 import { useFocusEffect } from '@react-navigation/native';
 import { useResponsiveContent } from '../../hooks/useResponsive';
+import { showAppAlert } from '../../components/AppAlert';
 
 
 import {
@@ -74,6 +75,7 @@ export default function DashboardScreen({
         'Erro ao carregar Dashboard:',
         erro
       );
+      showAppAlert('Dashboard indisponível', erro instanceof Error ? erro.message : 'Não foi possível carregar os dados online.');
     } finally {
       setCarregando(false);
     }

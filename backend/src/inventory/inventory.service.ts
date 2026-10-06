@@ -399,6 +399,7 @@ export class InventoryService {
     const saidasCents = expenses.reduce((sum, expense) => sum + expense.amountCents, 0);
     return {
       valorPedidosCents,
+      valorTotalInclCancelledCents: orders.reduce((sum, order) => sum + order.totalCents, 0),
       recebidoCents,
       porReceberCents,
       saidasCents,
@@ -406,6 +407,7 @@ export class InventoryService {
       totalPedidos: orders.length,
       entregues: orders.filter((order) => order.status === 'DELIVERED').length,
       cancelados: orders.filter((order) => order.status === 'CANCELLED').length,
+      emProducao: orders.filter((order) => order.status === 'PREPARING' || order.status === 'PRINTING').length,
     };
   }
 

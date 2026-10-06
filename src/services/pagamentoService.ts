@@ -1,5 +1,6 @@
 import { db } from '../database/database';
 import { sincronizarPagamentoLocal } from './sincronizacaoPagamentoService';
+import { obterTokenAdministrador } from './adminAuthService';
 
 // cspell:ignore Metodo
 export type MetodoPagamento =
@@ -249,6 +250,19 @@ export async function listarPagamentosPendentes() {
 }
 
 export async function contarPagamentosPendentes() {
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
+  if (apiUrl) {
+    const token = await obterTokenAdministrador();
+    if (!token) throw new Error('Inicie sessão como administrador para consultar pagamentos pendentes.');
+    const response = await fetch(`${apiUrl}/payments/pending`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error(`Não foi possível consultar pagamentos pendentes (API ${response.status}).`);
+    const pagamentosRemotos: unknown = await response.json();
+    if (!Array.isArray(pagamentosRemotos)) throw new Error('Resposta inválida do backend ao consultar pagamentos pendentes.');
+    return pagamentosRemotos.length;
+  }
+
   const resultado = await db.getFirstAsync<{ total: number }>("SELECT COUNT(*) AS total FROM pagamentos WHERE status = 'PENDENTE'");
   return resultado?.total ?? 0;
 }

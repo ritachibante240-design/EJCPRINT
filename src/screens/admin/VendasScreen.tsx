@@ -17,6 +17,7 @@ import {
 
 import { useFocusEffect } from '@react-navigation/native';
 import { useResponsiveContent } from '../../hooks/useResponsive';
+import { sincronizarTudoPendentes } from '../../services/sincronizacaoSeguraService';
 
 import {
 	listarPedidos,
@@ -40,9 +41,14 @@ export default function VendasScreen() {
 	const [pagamentoProcessando, setPagamentoProcessando] = useState<number | null>(null);
 
 	async function carregar() {
-		const dados = await listarPedidos();
-		setPedidos(dados);
-		setPendentes((await listarPagamentos()).filter((item) => item.status === 'PENDENTE'));
+		try {
+			await sincronizarTudoPendentes(3, 1200);
+			const dados = await listarPedidos();
+			setPedidos(dados);
+			setPendentes((await listarPagamentos()).filter((item) => item.status === 'PENDENTE'));
+		} catch (erro) {
+			showAppAlert('Vendas indisponíveis', erro instanceof Error ? erro.message : 'Não foi possível sincronizar vendas online.');
+		}
 	}
 
 	useFocusEffect(
