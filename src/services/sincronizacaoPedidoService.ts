@@ -24,10 +24,27 @@ type PedidoRemoto = {
   status: EstadoPedidoRemoto;
   createdAt: string;
   documents?: { id: string; originalName: string }[];
-  payments?: { amountCents: number; status: string }[];
+  payments?: { id: string; externalReference: string | null; amountCents: number; status: string }[];
 };
 
 type PedidoLocalSync = Pick<Pedido, 'id' | 'remoto_id' | 'sync_chave' | 'estado' | 'sincronizacao_estado' | 'documento_nome' | 'documento_uri' | 'documento_remoto_id'>;
+type EstadoClienteRemoto = {
+  id: string;
+  status: EstadoPedidoRemoto;
+  payments: {
+    id: string;
+    externalReference: string;
+    amountCents: number;
+    method: string;
+    type: string;
+    status: 'PENDING' | 'CONFIRMED' | 'REJECTED';
+    reference: string | null;
+    proofOriginalName: string | null;
+    rejectionReason: string | null;
+    createdAt: string;
+    confirmedAt: string | null;
+  }[];
+};
 
 const estadoRemotoParaLocal: Record<EstadoPedidoRemoto, string> = {
   RECEIVED: 'Pedido recebido',
@@ -46,6 +63,12 @@ const estadoLocalParaRemoto: Record<string, EstadoPedidoRemoto> = {
   Entregue: 'DELIVERED',
   Cancelado: 'CANCELLED',
 };
+
+const estadoPagamentoRemotoParaLocal = {
+  PENDING: 'PENDENTE',
+  CONFIRMED: 'CONFIRMADO',
+  REJECTED: 'REJEITADO',
+} as const;
 
 function obterUrlApi() {
   const url = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -258,3 +281,98 @@ export async function sincronizarPedidosRecebidos() {
   const pedidos = (await resposta.json()) as PedidoRemoto[];
   for (const pedido of pedidos) await guardarPedidoRemoto(pedido);
 }
+
+export async function sincronizarPedidosCliente() {
+  const apiUrl = obterUrlApi();
+  if (!apiUrl) return;
+
+  await sincronizarPedidosPendentes();
+  const pedidos = await db.getAllAsync<Pedido>(
+    'SELECT * FROM pedidos WHERE remoto_id IS NOT NULL ORDER BY id ASC'
+  );
+
+  for (const pedido of pedidos) {
+    if (!pedido.remoto_id) continue;
+    const resposta = await fetch(
+      `${apiUrl}/orders/${encodeURIComponent(pedido.remoto_id)}/customer-status`
+    );
+    if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
+    const remoto = await resposta.json() as EstadoClienteRemoto;
+    if (remoto.id !== pedido.remoto_id) {
+      throw new Error('O servidor retornou um pedido diferente do solicitado.');
+    }
+
+    await db.withTransactionAsync(async () => {
+      for (const pagamento of remoto.payments) {
+        const existente = await db.getFirstAsync<PagamentoLocalSyncStatus>(
+          `SELECT id, comprovativo_uri, comprovativo_nome
+           FROM pagamentos
+           WHERE remoto_id = ? OR sync_chave = ?
+           LIMIT 1`,
+          pagamento.id,
+          pagamento.externalReference
+        );
+        const status = estadoPagamentoRemotoParaLocal[pagamento.status];
+        if (existente) {
+          await db.runAsync(
+            `UPDATE pagamentos SET
+              pedido_id = ?, valor = ?, metodo = ?, referencia = ?, data_criacao = ?,
+              tipo = ?, status = ?, comprovativo_nome = ?, data_confirmacao = ?,
+              motivo_rejeicao = ?, sync_chave = ?, remoto_id = ?,
+              sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL
+             WHERE id = ?`,
+            pedido.id,
+            pagamento.amountCents / 100,
+            pagamento.method,
+            pagamento.reference,
+            pagamento.createdAt,
+            pagamento.type,
+            status,
+            pagamento.proofOriginalName ?? existente.comprovativo_nome,
+            pagamento.confirmedAt,
+            pagamento.rejectionReason,
+            pagamento.externalReference,
+            pagamento.id,
+            existente.id
+          );
+        } else {
+          await db.runAsync(
+            `INSERT INTO pagamentos (
+              pedido_id, valor, metodo, referencia, data_criacao, tipo, status,
+              comprovativo_nome, comprovativo_uri, data_confirmacao, motivo_rejeicao,
+              sync_chave, remoto_id, sincronizacao_estado, sincronizacao_erro
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'SINCRONIZADO', NULL)`,
+            pedido.id,
+            pagamento.amountCents / 100,
+            pagamento.method,
+            pagamento.reference,
+            pagamento.createdAt,
+            pagamento.type,
+            status,
+            pagamento.proofOriginalName,
+            pagamento.confirmedAt,
+            pagamento.rejectionReason,
+            pagamento.externalReference,
+            pagamento.id
+          );
+        }
+      }
+
+      const valorPagoRemoto = remoto.payments
+        .filter((pagamento) => pagamento.status === 'CONFIRMED')
+        .reduce((total, pagamento) => total + pagamento.amountCents, 0) / 100;
+      await db.runAsync(
+        'UPDATE pedidos SET estado = ?, valor_pago = ? WHERE id = ?',
+        estadoRemotoParaLocal[remoto.status],
+        valorPagoRemoto,
+        pedido.id
+      );
+    });
+  }
+}
+
+type PagamentoLocalSyncStatus = {
+  id: number;
+  comprovativo_uri: string | null;
+  comprovativo_nome: string | null;
+};

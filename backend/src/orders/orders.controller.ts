@@ -39,6 +39,11 @@ export class OrdersController {
     return this.ordersService.list();
   }
 
+  @Get(':id/customer-status')
+  customerStatus(@Param('id') id: string) {
+    return this.ordersService.customerStatus(id);
+  }
+
   @UseGuards(AdminAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {

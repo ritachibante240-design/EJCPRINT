@@ -8,7 +8,7 @@ import type { MetodoPagamento, Pagamento, TipoPagamento } from './pagamentoServi
 type EstadoRemoto = 'PENDING' | 'CONFIRMED' | 'REJECTED';
 type PagamentoRemoto = { id: string; status: EstadoRemoto; confirmedAt?: string | null; rejectionReason?: string | null };
 type PedidoRemotoLocal = { remoto_id: string | null };
-type OpcoesSincronizacao = { propagarErrosDeCliente?: boolean };
+type OpcoesSincronizacao = { propagarErrosDeCliente?: boolean; propagarErros?: boolean };
 type PagamentoPendenteRemoto = {
   id: string;
   externalReference: string | null;
@@ -122,7 +122,7 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
       await db.runAsync('UPDATE pagamentos SET remoto_id = ? WHERE id = ?', remoto.id, pagamento.id);
     } else if (pagamento.status === 'PENDENTE') {
       const token = await obterTokenAdministrador();
-      if (!token) return;
+      if (!token) throw new Error('Inicie sessão como administrador para sincronizar o pagamento.');
       const resposta = await fetch(`${api}/payments/${pagamento.remoto_id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -130,7 +130,7 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
       remoto = (await resposta.json()) as PagamentoRemoto;
     } else {
       const token = await obterTokenAdministrador();
-      if (!token) return;
+      if (!token) throw new Error('Inicie sessão como administrador para confirmar o pagamento no servidor.');
       const acao = pagamento.status === 'CONFIRMADO' ? 'approve' : 'reject';
       const resposta = await fetch(`${api}/payments/${pagamento.remoto_id}/${acao}`, {
         method: 'PATCH',
@@ -145,7 +145,7 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
 
     if (pagamento.status !== 'PENDENTE' && remoto.status === 'PENDING') {
       const token = await obterTokenAdministrador();
-      if (!token) return;
+      if (!token) throw new Error('Inicie sessão como administrador para confirmar o pagamento no servidor.');
       const acao = pagamento.status === 'CONFIRMADO' ? 'approve' : 'reject';
       const resposta = await fetch(`${api}/payments/${remoto.id}/${acao}`, {
         method: 'PATCH',
@@ -165,12 +165,12 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
       mensagemErro(erro),
       pagamento.id
     );
-    if (
+    if (opcoes.propagarErros || (
       opcoes.propagarErrosDeCliente &&
       erro instanceof ApiResponseError &&
       erro.status >= 400 &&
       erro.status < 500
-    ) {
+    )) {
       throw erro;
     }
   }
@@ -184,7 +184,9 @@ export async function sincronizarPagamentosPendentes() {
         OR (status IN ('CONFIRMADO', 'REJEITADO') AND sincronizacao_estado = 'PENDENTE')
      ORDER BY id ASC`
   );
-  for (const pagamento of pendentes) await sincronizarPagamentoLocal(pagamento);
+  for (const pagamento of pendentes) {
+    await sincronizarPagamentoLocal(pagamento, { propagarErros: true });
+  }
 }
 
 export async function sincronizarPagamentosRecebidos() {

@@ -41,13 +41,31 @@ export default function VendasScreen() {
 	const [pagamentoProcessando, setPagamentoProcessando] = useState<number | null>(null);
 
 	async function carregar() {
+		let erroSincronizacao: unknown;
 		try {
 			await sincronizarTudoPendentes(3, 1200);
-			const dados = await listarPedidos();
-			setPedidos(dados);
-			setPendentes((await listarPagamentos()).filter((item) => item.status === 'PENDENTE'));
 		} catch (erro) {
-			showAppAlert('Vendas indisponíveis', erro instanceof Error ? erro.message : 'Não foi possível sincronizar vendas online.');
+			erroSincronizacao = erro;
+			console.warn('Não foi possível atualizar vendas do servidor.', erro);
+		}
+
+		try {
+			const [dados, pagamentos] = await Promise.all([
+				listarPedidos(),
+				listarPagamentos(),
+			]);
+			setPedidos(dados);
+			setPendentes(pagamentos.filter((item) => item.status === 'PENDENTE'));
+		} catch (erro) {
+			showAppAlert('Vendas indisponíveis', erro instanceof Error ? erro.message : 'Não foi possível carregar as vendas locais.');
+			return;
+		}
+
+		if (erroSincronizacao) {
+			showAppAlert(
+				'Vendas não atualizadas',
+				'Os dados guardados neste dispositivo foram carregados, mas não foi possível atualizar os pedidos e pagamentos do servidor. Verifique a ligação e tente novamente.'
+			);
 		}
 	}
 
@@ -243,6 +261,14 @@ export default function VendasScreen() {
 				data={pedidos}
 				keyExtractor={(item) => item.id.toString()}
 				renderItem={renderPedido}
+				ListEmptyComponent={
+					<View style={styles.empty}>
+						<Text style={styles.emptyTitle}>Nenhum pedido para apresentar</Text>
+						<Text style={styles.emptyText}>
+							Os pedidos dos clientes aparecerão aqui quando forem sincronizados.
+						</Text>
+					</View>
+				}
 				ListHeaderComponent={
 					<View style={styles.pageHeader}>
 						<Text style={styles.title}>
@@ -336,6 +362,25 @@ const styles = StyleSheet.create({
 
 	pageHeader: {
 		marginBottom: 20,
+	},
+
+	empty: {
+		alignItems: 'center',
+		paddingHorizontal: 20,
+		paddingVertical: 48,
+	},
+
+	emptyTitle: {
+		color: '#102A43',
+		fontSize: 16,
+		fontWeight: 'bold',
+		textAlign: 'center',
+	},
+
+	emptyText: {
+		color: '#829AB1',
+		marginTop: 8,
+		textAlign: 'center',
 	},
 
 	title: {
@@ -518,7 +563,6 @@ const styles = StyleSheet.create({
 		marginTop: 18,
 	},
 });
-
 
 
 

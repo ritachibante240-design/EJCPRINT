@@ -49,10 +49,38 @@ export class OrdersService {
     return this.prisma.order.findMany({
       include: {
         documents: true,
-        payments: { select: { amountCents: true, status: true } },
+        payments: { select: { id: true, externalReference: true, amountCents: true, status: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async customerStatus(id: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        payments: {
+          select: {
+            id: true,
+            externalReference: true,
+            amountCents: true,
+            method: true,
+            type: true,
+            status: true,
+            reference: true,
+            proofOriginalName: true,
+            rejectionReason: true,
+            createdAt: true,
+            confirmedAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!order) throw new NotFoundException('Pedido não encontrado.');
+    return order;
   }
 
   async uploadDocument(orderId: string, file?: Express.Multer.File) {

@@ -211,7 +211,33 @@ export async function confirmarPagamento(id: number) {
     await db.runAsync("UPDATE pagamentos SET sincronizacao_estado = 'PENDENTE' WHERE id = ?", id);
     pagamentoConfirmado = await db.getFirstAsync<Pagamento>('SELECT * FROM pagamentos WHERE id = ?', id);
   });
-  if (pagamentoConfirmado) await sincronizarPagamentoLocal(pagamentoConfirmado);
+  if (pagamentoConfirmado) {
+    try {
+      await sincronizarPagamentoLocal(pagamentoConfirmado, { propagarErros: true });
+    } catch (erro) {
+      await db.withTransactionAsync(async () => {
+        const atual = await db.getFirstAsync<Pagamento>(
+          'SELECT * FROM pagamentos WHERE id = ?',
+          id
+        );
+        if (atual?.status !== 'CONFIRMADO') return;
+        await db.runAsync(
+          `UPDATE pagamentos
+           SET status = 'PENDENTE', data_confirmacao = NULL, sincronizacao_estado = 'PENDENTE'
+           WHERE id = ?`,
+          id
+        );
+        await db.runAsync(
+          'UPDATE pedidos SET valor_pago = MAX(valor_pago - ?, 0) WHERE id = ?',
+          atual.valor,
+          atual.pedido_id
+        );
+      });
+      throw new Error(
+        `Não foi possível confirmar o pagamento no servidor. Verifique a ligação e tente novamente. ${erro instanceof Error ? erro.message : ''}`.trim()
+      );
+    }
+  }
 }
 
 export async function rejeitarPagamento(id: number, motivo: string) {
