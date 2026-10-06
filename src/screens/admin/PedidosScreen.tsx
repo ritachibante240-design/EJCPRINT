@@ -10,6 +10,10 @@ import {
   Platform,
   RefreshControl,
 } from "react-native";
+import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
+import { fetch as expoFetch } from "expo/fetch";
+import { db } from "../../database/database";
 
 import { useFocusEffect } from "@react-navigation/native";
 import { useResponsiveContent } from "../../hooks/useResponsive";
@@ -44,6 +48,7 @@ export default function PedidosScreen() {
   const [pedidoProcessando, setPedidoProcessando] = useState<number | null>(
     null,
   );
+  const [documentoProcessando, setDocumentoProcessando] = useState<number | null>(null);
 
   async function carregarPedidos(mostrarErro = true) {
     setAtualizando(true);
@@ -172,6 +177,85 @@ export default function PedidosScreen() {
         "Não foi possível baixar o documento",
         erro instanceof Error ? erro.message : "Tente novamente mais tarde.",
       );
+    }
+  }
+
+  async function anexarDocumento(pedido: Pedido) {
+    if (documentoProcessando !== null) return;
+    if (!pedido.remoto_id) {
+      showAppAlert("Pedido ainda não sincronizado", "Sincronize o pedido com o servidor antes de anexar o documento.");
+      return;
+    }
+
+    try {
+      setDocumentoProcessando(pedido.id);
+      const resultado = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (resultado.canceled) return;
+
+      const arquivoSelecionado = resultado.assets[0];
+      const extensao = arquivoSelecionado.name.split(".").pop()?.toLowerCase();
+      const mimeType = arquivoSelecionado.mimeType ?? (
+        extensao === "pdf" ? "application/pdf" :
+          extensao === "doc" ? "application/msword" :
+            extensao === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : ""
+      );
+      if (![
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ].includes(mimeType)) {
+        throw new Error("Selecione um ficheiro PDF, DOC ou DOCX.");
+      }
+      if (arquivoSelecionado.size && arquivoSelecionado.size > 20 * 1024 * 1024) {
+        throw new Error("O documento não pode exceder 20 MB.");
+      }
+
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, "");
+      if (!apiUrl) throw new Error("A URL do backend não está configurada.");
+      const token = await obterTokenAdministrador();
+      if (!token) throw new Error("Inicie sessão como administrador para anexar o documento.");
+
+      const arquivo = Platform.OS === "web"
+        ? arquivoSelecionado.file
+        : new File(arquivoSelecionado.uri);
+      if (!arquivo || (Platform.OS !== "web" && !(arquivo as File).exists)) {
+        throw new Error("O ficheiro selecionado não está disponível no dispositivo.");
+      }
+      const body = new FormData();
+      body.append("document", arquivo, arquivoSelecionado.name);
+      const resposta = await expoFetch(`${apiUrl}/orders/${pedido.remoto_id}/document`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      });
+      if (!resposta.ok) {
+        const erro = await resposta.json().catch(() => null) as { message?: unknown } | null;
+        throw new Error(typeof erro?.message === "string" ? erro.message : `Não foi possível enviar o documento (API ${resposta.status}).`);
+      }
+
+      const documento = await resposta.json() as { id?: string; originalName?: string };
+      if (!documento.id) throw new Error("O servidor não confirmou o documento enviado.");
+      await db.runAsync(
+        `UPDATE pedidos SET documento_nome = ?, documento_uri = ?, documento_remoto_id = ? WHERE id = ?`,
+        documento.originalName ?? arquivoSelecionado.name,
+        `${apiUrl}/orders/${pedido.remoto_id}/document`,
+        documento.id,
+        pedido.id,
+      );
+      await carregarPedidos(false);
+      showAppAlert("Documento anexado", "O ficheiro foi enviado e já pode ser baixado neste pedido.");
+    } catch (erro) {
+      showAppAlert("Não foi possível anexar o documento", erro instanceof Error ? erro.message : "Verifique a ligação e tente novamente.");
+    } finally {
+      setDocumentoProcessando(null);
     }
   }
 
@@ -438,6 +522,20 @@ export default function PedidosScreen() {
               >
                 <Ionicons name="download-outline" size={19} color="#102A43" />
                 <Text style={styles.downloadButtonText}>Baixar documento</Text>
+              </Pressable>
+            )}
+            {!item.documento_uri && (
+              <Pressable
+                style={styles.downloadButton}
+                disabled={documentoProcessando !== null}
+                onPress={() => anexarDocumento(item)}
+              >
+                {documentoProcessando === item.id
+                  ? <ActivityIndicator size="small" color="#102A43" />
+                  : <Ionicons name="cloud-upload-outline" size={19} color="#102A43" />}
+                <Text style={styles.downloadButtonText}>
+                  {documentoProcessando === item.id ? "A enviar documento..." : "Anexar documento"}
+                </Text>
               </Pressable>
             )}
             <View style={styles.detailLine}>
