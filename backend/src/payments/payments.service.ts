@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, extname } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,14 +9,19 @@ export class PaymentsService {
 
   constructor(private readonly prisma: PrismaService, private readonly proofStorage: ObjectStorageService) {}
   async create(input: { externalReference: string; orderId: string; amountCents: number; method: string; type: string; reference?: string }, proof?: Express.Multer.File) {
-    if (input.method.trim() !== 'Dinheiro' && !proof) throw new BadRequestException('O comprovativo é obrigatório para este método de pagamento.');
     const reference = input.externalReference.trim();
     if (!reference) throw new BadRequestException('Referência do pagamento inválida.');
     const existing = await this.prisma.payment.findUnique({
       where: { externalReference: reference },
-      select: { id: true, status: true, confirmedAt: true, rejectionReason: true },
+      select: { id: true, orderId: true, status: true, confirmedAt: true, rejectionReason: true },
     });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.orderId !== input.orderId) {
+        throw new ConflictException('A referência deste pagamento já está associada a outro pedido.');
+      }
+      return existing;
+    }
+    if (input.method.trim() !== 'Dinheiro' && !proof) throw new BadRequestException('O comprovativo é obrigatório para este método de pagamento.');
 
     const proofSha256 = proof
       ? createHash('sha256').update(proof.buffer).digest('hex')
@@ -28,9 +33,14 @@ export class PaymentsService {
       const result = await this.prisma.$transaction(async (transaction) => {
         const retry = await transaction.payment.findUnique({
           where: { externalReference: reference },
-          select: { id: true, status: true, confirmedAt: true, rejectionReason: true },
+          select: { id: true, orderId: true, status: true, confirmedAt: true, rejectionReason: true },
         });
-        if (retry) return { payment: retry, proofWasUsed: false };
+        if (retry) {
+          if (retry.orderId !== input.orderId) {
+            throw new ConflictException('A referência deste pagamento já está associada a outro pedido.');
+          }
+          return { payment: retry, proofWasUsed: false };
+        }
 
         if (proofSha256) {
           const duplicate = await transaction.payment.findUnique({

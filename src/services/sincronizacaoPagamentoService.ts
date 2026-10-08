@@ -127,8 +127,7 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
       if (pagamento.referencia) body.append('reference', pagamento.referencia);
       if (pagamento.comprovativo_uri) {
         const proof = new File(pagamento.comprovativo_uri);
-        if (!proof.exists) throw new Error('O ficheiro do comprovativo não está disponível no dispositivo.');
-        body.append('proof', proof);
+        if (proof.exists) body.append('proof', proof);
       }
       const resposta = await fetchComTimeout(`${api}/payments`, { method: 'POST', body }, expoFetch);
       if (!resposta.ok) throw new ApiResponseError(resposta.status, await mensagemErroApi(resposta));
@@ -199,8 +198,19 @@ export async function sincronizarPagamentosPendentes() {
         OR (status IN ('CONFIRMADO', 'REJEITADO') AND sincronizacao_estado = 'PENDENTE')
      ORDER BY id ASC`
   );
+  const erros: string[] = [];
   for (const pagamento of pendentes) {
-    await sincronizarPagamentoLocal(pagamento, { propagarErros: true });
+    try {
+      await sincronizarPagamentoLocal(pagamento, { propagarErros: true });
+    } catch (erro) {
+      const mensagem = mensagemErro(erro);
+      erros.push(`${pagamento.id}: ${mensagem}`);
+      console.warn(`Não foi possível sincronizar o pagamento ${pagamento.id}.`, erro);
+    }
+  }
+  if (erros.length > 0) {
+    const restantes = erros.length > 3 ? ` (e mais ${erros.length - 3})` : '';
+    throw new Error(`Falha ao sincronizar pagamento(s): ${erros.slice(0, 3).join('; ')}${restantes}`);
   }
 }
 
