@@ -18,6 +18,8 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useResponsiveContent } from '../../hooks/useResponsive';
 import { sincronizarTudoPendentes } from '../../services/sincronizacaoSeguraService';
+import { abrirArquivoPedido } from '../../services/arquivoRemotoService';
+import { obterTokenAdministrador } from '../../services/adminAuthService';
 
 import {
 	listarPedidos,
@@ -176,6 +178,38 @@ export default function VendasScreen() {
 		}
 	}
 
+	async function abrirComprovativoPagamento(pagamento: Pagamento) {
+		if (!pagamento.comprovativo_uri) {
+			showAppAlert('Comprovativo indisponível', 'Este pagamento não tem um comprovativo anexado.');
+			return;
+		}
+
+		const nome = pagamento.comprovativo_nome ?? 'comprovativo';
+		const extensao = nome.split('.').pop()?.toLowerCase();
+		const mimeType = extensao === 'pdf'
+			? 'application/pdf'
+			: extensao === 'png'
+				? 'image/png'
+				: 'image/jpeg';
+
+		try {
+			const token = pagamento.comprovativo_uri.startsWith('http')
+				? await obterTokenAdministrador()
+				: null;
+			await abrirArquivoPedido(
+				pagamento.comprovativo_uri,
+				nome,
+				mimeType,
+				token
+			);
+		} catch (erro) {
+			showAppAlert(
+				'Não foi possível abrir o comprovativo',
+				erro instanceof Error ? erro.message : 'Verifique a ligação e tente novamente.'
+			);
+		}
+	}
+
 	function renderPedido({
 		item,
 	}: {
@@ -268,7 +302,7 @@ export default function VendasScreen() {
 
 	return (
 		<>
-			{pendentes.length > 0 && <View style={styles.pendingReview}><Text style={styles.reviewTitle}>Pagamentos para análise</Text>{pendentes.map((pagamento) => <View key={pagamento.id} style={styles.reviewCard}><Text style={styles.numero}>{pagamento.numero_pedido}</Text><Text style={styles.cliente}>{pagamento.cliente}</Text><Text style={styles.reviewAmount}>{pagamento.valor.toFixed(2)} MT • {pagamento.metodo}</Text>{pagamento.comprovativo_uri && <Pressable onPress={() => { setComprovativoUri(pagamento.comprovativo_uri); setVisualizarComprovativo(true); }}><Text style={styles.viewProof}>Ver comprovativo</Text></Pressable>}<View style={styles.reviewActions}><Pressable disabled={pagamentoProcessando !== null} style={styles.approveButton} onPress={() => { void analisarPagamento(pagamento.id, true); }}><Text style={styles.approveText}>{pagamentoProcessando === pagamento.id ? 'A processar...' : 'Confirmar'}</Text></Pressable><Pressable disabled={pagamentoProcessando !== null} style={styles.rejectButton} onPress={() => { void analisarPagamento(pagamento.id, false); }}><Text style={styles.rejectText}>{pagamentoProcessando === pagamento.id ? 'A processar...' : 'Rejeitar'}</Text></Pressable></View></View>)}</View>}
+			{pendentes.length > 0 && <View style={styles.pendingReview}><Text style={styles.reviewTitle}>Pagamentos para análise</Text>{pendentes.map((pagamento) => <View key={pagamento.id} style={styles.reviewCard}><Text style={styles.numero}>{pagamento.numero_pedido}</Text><Text style={styles.cliente}>{pagamento.cliente}</Text><Text style={styles.reviewAmount}>{pagamento.valor.toFixed(2)} MT • {pagamento.metodo}</Text><Pressable onPress={() => { void abrirComprovativoPagamento(pagamento); }}><Text style={styles.viewProof}>{pagamento.comprovativo_uri ? 'Ver comprovativo' : 'Comprovativo indisponível'}</Text></Pressable><View style={styles.reviewActions}><Pressable disabled={pagamentoProcessando !== null} style={styles.approveButton} onPress={() => { void analisarPagamento(pagamento.id, true); }}><Text style={styles.approveText}>{pagamentoProcessando === pagamento.id ? 'A processar...' : 'Confirmar'}</Text></Pressable><Pressable disabled={pagamentoProcessando !== null} style={styles.rejectButton} onPress={() => { void analisarPagamento(pagamento.id, false); }}><Text style={styles.rejectText}>{pagamentoProcessando === pagamento.id ? 'A processar...' : 'Rejeitar'}</Text></Pressable></View></View>)}</View>}
 			<FlatList
 				style={styles.container}
 				contentContainerStyle={[styles.content, isDesktop && { maxWidth: 1000, width: '100%', alignSelf: 'center' }]}
@@ -577,4 +611,3 @@ const styles = StyleSheet.create({
 		marginTop: 18,
 	},
 });
-
