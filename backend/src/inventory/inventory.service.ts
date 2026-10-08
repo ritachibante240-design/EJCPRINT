@@ -37,7 +37,7 @@ export class InventoryService {
       throw new BadRequestException('Use o cadastro único “Papel A4” para controlar folhas de papel.');
     }
 
-    const paper = normalizedName === 'papel a4';
+    const paper = normalizedName === 'papel a4' || normalizedName === 'a4';
     const itemName = paper ? 'Papel A4' : name;
     const itemCategory = paper ? 'Papel' : category;
     const itemUnit = paper ? 'folhas' : unit;
@@ -441,7 +441,8 @@ export class InventoryService {
         return { order: updatedOrder, stockItem: null, movement: null };
       }
 
-      const paper = await transaction.stockItem.findUnique({ where: { normalizedName: 'papel a4' } });
+      const paper = await transaction.stockItem.findUnique({ where: { normalizedName: 'papel a4' } })
+        ?? await transaction.stockItem.findUnique({ where: { normalizedName: 'a4' } });
       if (!paper) throw new BadRequestException('Papel A4 não está cadastrado no stock.');
       if (!Number.isInteger(order.sheetsRequired) || order.sheetsRequired <= 0) {
         throw new BadRequestException('Este pedido não possui um cálculo válido de folhas.');
