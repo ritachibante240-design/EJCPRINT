@@ -111,10 +111,18 @@ segura e reexecutável.
 ## Acesso administrativo
 
 `POST /api/payments` permanece público para permitir que o cliente comunique
-um pagamento pendente. As operações de consulta e decisão — `GET /api/payments/:id`,
+um pagamento pendente. O endpoint `POST /api/payments/admin/confirmed` exige
+sessão de administrador e serve apenas para sincronizar pagamentos já confirmados
+localmente pelo administrador, sem um comprovativo disponível no dispositivo.
+As operações de consulta e decisão — `GET /api/payments/:id`,
 `GET /api/payments/pending`, `PATCH /api/payments/:id/approve` e
 `PATCH /api/payments/:id/reject` — exigem um token obtido em
 `POST /api/auth/admin/login`, enviado como `Authorization: Bearer <token>`.
+
+Pagamentos locais pendentes, sem comprovativo disponível e ainda sem registo no
+servidor, são marcados localmente como rejeitados com a indicação de que o
+comprovativo deve ser enviado novamente. Isso não confirma nem contabiliza o
+pagamento; permite que o cliente faça uma nova submissão válida.
 
 O login principal é `POST /api/auth/login` e consulta utilizadores ADMIN
 guardados no banco. O endpoint legado `POST /api/auth/admin/login` continua

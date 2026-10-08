@@ -40,6 +40,12 @@ function mensagemErro(erro: unknown) {
   return erro instanceof Error ? erro.message.slice(0, 240) : 'Falha de sincronização do pagamento.';
 }
 
+function obterComprovativoLocal(pagamento: Pagamento) {
+  if (!pagamento.comprovativo_uri || /^https?:\/\//i.test(pagamento.comprovativo_uri)) return null;
+  const proof = new File(pagamento.comprovativo_uri);
+  return proof.exists ? proof : null;
+}
+
 async function mensagemErroApi(resposta: Response) {
   const body = await resposta.json().catch(() => null) as { message?: unknown } | null;
   if (typeof body?.message === 'string') return body.message;
@@ -118,18 +124,43 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
         await db.runAsync('UPDATE pagamentos SET sync_chave = ? WHERE id = ?', externalReference, pagamento.id);
       }
 
-      const body = new FormData();
-      body.append('externalReference', externalReference);
-      body.append('orderId', pedido.remoto_id);
-      body.append('amountCents', String(Math.round((pagamento.valor + Number.EPSILON) * 100)));
-      body.append('method', pagamento.metodo as MetodoPagamento);
-      body.append('type', pagamento.tipo as TipoPagamento);
-      if (pagamento.referencia) body.append('reference', pagamento.referencia);
-      if (pagamento.comprovativo_uri) {
-        const proof = new File(pagamento.comprovativo_uri);
-        if (proof.exists) body.append('proof', proof);
+      const proof = obterComprovativoLocal(pagamento);
+      const adminConfirmedWithoutProof =
+        pagamento.status === 'CONFIRMADO' &&
+        pagamento.metodo !== 'Dinheiro' &&
+        !proof;
+      let body: FormData | string;
+      let headers: HeadersInit | undefined;
+      let endpoint = `${api}/payments`;
+
+      if (adminConfirmedWithoutProof) {
+        const token = await obterTokenAdministrador();
+        if (!token) throw new Error('Inicie sessão como administrador para sincronizar o pagamento confirmado.');
+        endpoint = `${api}/payments/admin/confirmed`;
+        headers = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        };
+        body = JSON.stringify({
+          externalReference,
+          orderId: pedido.remoto_id,
+          amountCents: Math.round((pagamento.valor + Number.EPSILON) * 100),
+          method: pagamento.metodo,
+          type: pagamento.tipo,
+          ...(pagamento.referencia ? { reference: pagamento.referencia } : {}),
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('externalReference', externalReference);
+        formData.append('orderId', pedido.remoto_id);
+        formData.append('amountCents', String(Math.round((pagamento.valor + Number.EPSILON) * 100)));
+        formData.append('method', pagamento.metodo as MetodoPagamento);
+        formData.append('type', pagamento.tipo as TipoPagamento);
+        if (pagamento.referencia) formData.append('reference', pagamento.referencia);
+        if (proof) formData.append('proof', proof);
+        body = formData;
       }
-      const resposta = await fetchComTimeout(`${api}/payments`, { method: 'POST', body }, expoFetch);
+      const resposta = await fetchComTimeout(endpoint, { method: 'POST', headers, body }, expoFetch);
       if (!resposta.ok) throw new ApiResponseError(resposta.status, await mensagemErroApi(resposta));
       remoto = (await resposta.json()) as PagamentoRemoto;
       if (!remoto.id) throw new Error('A API não retornou o identificador do pagamento.');
@@ -192,10 +223,28 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
 
 export async function sincronizarPagamentosPendentes() {
   if (!urlApi()) return;
+  const pagamentosSemComprovativo = await db.getAllAsync<Pagamento>(
+    `SELECT * FROM pagamentos
+     WHERE status = 'PENDENTE' AND remoto_id IS NULL AND metodo != 'Dinheiro'`
+  );
+  for (const pagamento of pagamentosSemComprovativo) {
+    if (obterComprovativoLocal(pagamento)) continue;
+    const motivo = 'Comprovativo não encontrado neste dispositivo. Envie novamente o pagamento com o comprovativo.';
+    await db.runAsync(
+      `UPDATE pagamentos
+       SET status = 'REJEITADO', motivo_rejeicao = ?, sincronizacao_erro = ?
+       WHERE id = ? AND status = 'PENDENTE' AND remoto_id IS NULL`,
+      motivo,
+      motivo,
+      pagamento.id
+    );
+  }
+
   const pendentes = await db.getAllAsync<Pagamento>(
     `SELECT * FROM pagamentos
      WHERE (status = 'PENDENTE' AND (remoto_id IS NULL OR sincronizacao_estado = 'PENDENTE'))
-        OR (status IN ('CONFIRMADO', 'REJEITADO') AND sincronizacao_estado = 'PENDENTE')
+        OR (status = 'CONFIRMADO' AND sincronizacao_estado = 'PENDENTE')
+        OR (status = 'REJEITADO' AND sincronizacao_estado = 'PENDENTE' AND remoto_id IS NOT NULL)
      ORDER BY id ASC`
   );
   const erros: string[] = [];

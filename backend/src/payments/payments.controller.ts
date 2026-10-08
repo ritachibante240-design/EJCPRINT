@@ -17,6 +17,9 @@ export class PaymentsController {
   }))
   create(@Body() body: CreatePaymentDto, @UploadedFile() proof?: Express.Multer.File) { return this.service.create(body, proof); }
   @UseGuards(AdminAuthGuard)
+  @Post('admin/confirmed')
+  createConfirmed(@Body() body: CreatePaymentDto) { return this.service.createConfirmed(body); }
+  @UseGuards(AdminAuthGuard)
   @Get('pending') pending() { return this.service.pending(); }
   @UseGuards(AdminAuthGuard)
   @Get(':id') findOne(@Param('id') id: string) { return this.service.findOne(id); }

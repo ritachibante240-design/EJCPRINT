@@ -102,6 +102,57 @@ export class PaymentsService {
     }
   }
 
+  async createConfirmed(input: { externalReference: string; orderId: string; amountCents: number; method: string; type: string; reference?: string }) {
+    const externalReference = input.externalReference.trim();
+    if (!externalReference) throw new BadRequestException('Referência do pagamento inválida.');
+
+    return this.prisma.$transaction(async (transaction) => {
+      const existing = await transaction.payment.findUnique({
+        where: { externalReference },
+      });
+      if (existing) {
+        if (existing.orderId !== input.orderId) {
+          throw new ConflictException('A referência deste pagamento já está associada a outro pedido.');
+        }
+        if (existing.status === 'CONFIRMED') return existing;
+        if (existing.status !== 'PENDING') {
+          throw new BadRequestException('Este pagamento já foi rejeitado.');
+        }
+      }
+
+      const order = await transaction.order.findUnique({
+        where: { id: input.orderId },
+        include: { payments: { where: { status: 'CONFIRMED' } } },
+      });
+      if (!order) throw new NotFoundException('Pedido não encontrado.');
+
+      const paidCents = order.payments.reduce((sum, payment) => sum + payment.amountCents, 0);
+      if (input.amountCents > order.totalCents - paidCents) {
+        throw new BadRequestException('A aprovação excederia o total do pedido.');
+      }
+
+      if (existing) {
+        return transaction.payment.update({
+          where: { id: existing.id },
+          data: { status: 'CONFIRMED', confirmedAt: new Date() },
+        });
+      }
+
+      return transaction.payment.create({
+        data: {
+          externalReference,
+          orderId: order.id,
+          amountCents: input.amountCents,
+          method: input.method.trim(),
+          type: input.type.trim(),
+          reference: input.reference?.trim() || null,
+          status: 'CONFIRMED',
+          confirmedAt: new Date(),
+        },
+      });
+    });
+  }
+
   pending() { return this.prisma.payment.findMany({ where: { status: 'PENDING' }, include: { order: true }, orderBy: { createdAt: 'asc' } }); }
   async findOne(id: string) {
     const payment = await this.prisma.payment.findUnique({ where: { id }, include: { order: true } });
