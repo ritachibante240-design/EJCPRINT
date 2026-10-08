@@ -31,16 +31,29 @@ export default function PagamentosPendentesScreen() {
   const carregar = useCallback(async (mostrarErro = true) => {
     setAtualizando(true);
     let erroSincronizacao: unknown;
+    const carregarDadosLocais = async () => {
+      setItems(await listarPagamentosPendentes());
+      setToken(await obterTokenAdministrador());
+    };
+
     try {
-      await sincronizarTudoPendentes(3, 1200);
+      await carregarDadosLocais();
+    } catch (erro) {
+      console.error(erro);
+      showAppAlert('Erro', 'Não foi possível carregar os pagamentos locais.');
+      setAtualizando(false);
+      return;
+    }
+
+    try {
+      await sincronizarTudoPendentes(1, 1200);
     } catch (erro) {
       erroSincronizacao = erro;
       console.warn('Não foi possível atualizar pagamentos do servidor.', erro);
     }
 
     try {
-      setItems(await listarPagamentosPendentes());
-      setToken(await obterTokenAdministrador());
+      await carregarDadosLocais();
     } catch (erro) {
       console.error(erro);
       showAppAlert('Erro', 'Não foi possível carregar os pagamentos locais.');
@@ -64,7 +77,7 @@ export default function PagamentosPendentesScreen() {
       setProcessando(item.id);
       if (aprovar) await confirmarPagamento(item.id);
       else await rejeitarPagamento(item.id, 'Comprovativo incorreto');
-      await carregar(false);
+      void carregar(false);
       showAppAlert(
         aprovar ? 'Pagamento aprovado' : 'Pagamento reprovado',
         aprovar ? 'O pagamento foi enviado para confirmação no servidor e entrou no Caixa.' : 'O cliente poderá enviar um novo comprovativo.'

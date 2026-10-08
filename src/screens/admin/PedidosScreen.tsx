@@ -52,16 +52,30 @@ export default function PedidosScreen() {
 
   async function carregarPedidos(mostrarErro = true) {
     setAtualizando(true);
+    const carregarPedidosLocais = async () => {
+      setPedidos(await listarPedidos());
+    };
+
+    try {
+      await carregarPedidosLocais();
+    } catch (erro) {
+      console.error(erro);
+      showAppAlert("Erro", "Não foi possível carregar os pedidos locais.");
+      setCarregando(false);
+      setAtualizando(false);
+      return;
+    }
+
     let erroSincronizacao: unknown;
     try {
-      await sincronizarTudoPendentes(3, 1200);
+      await sincronizarTudoPendentes(1, 1200);
     } catch (erro) {
       erroSincronizacao = erro;
       console.warn('Não foi possível atualizar os pedidos do servidor.', erro);
     }
 
     try {
-      setPedidos(await listarPedidos());
+      await carregarPedidosLocais();
     } catch (erro) {
       console.error(erro);
       showAppAlert("Erro", "Não foi possível carregar os pedidos locais.");
@@ -73,7 +87,7 @@ export default function PedidosScreen() {
     if (erroSincronizacao && mostrarErro) {
       showAppAlert(
         "Pedidos não atualizados",
-        "A lista local foi mantida, mas não foi possível atualizar os pedidos do servidor. Verifique a ligação e tente atualizar novamente."
+        `A lista local foi mantida, mas não foi possível atualizar os pedidos do servidor. ${erroSincronizacao instanceof Error ? erroSincronizacao.message : 'Verifique a ligação e tente atualizar novamente.'}`
       );
     }
   }

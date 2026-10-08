@@ -47,6 +47,21 @@ async function mensagemErroApi(resposta: Response) {
   return `API respondeu ${resposta.status}.`;
 }
 
+async function fetchComTimeout(url: string, init: RequestInit = {}, executarFetch: typeof fetch = fetch) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    return await executarFetch(url, { ...init, signal: controller.signal });
+  } catch (erro) {
+    if (controller.signal.aborted) {
+      throw new Error('O servidor demorou demasiado a responder. Verifique a ligação e tente novamente.');
+    }
+    throw erro;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function aplicarEstadoRemoto(pagamentoId: number, remoto: PagamentoRemoto) {
   await db.withTransactionAsync(async () => {
     const local = await db.getFirstAsync<Pagamento>(
@@ -115,7 +130,7 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
         if (!proof.exists) throw new Error('O ficheiro do comprovativo não está disponível no dispositivo.');
         body.append('proof', proof);
       }
-      const resposta = await expoFetch(`${api}/payments`, { method: 'POST', body });
+      const resposta = await fetchComTimeout(`${api}/payments`, { method: 'POST', body }, expoFetch);
       if (!resposta.ok) throw new ApiResponseError(resposta.status, await mensagemErroApi(resposta));
       remoto = (await resposta.json()) as PagamentoRemoto;
       if (!remoto.id) throw new Error('A API não retornou o identificador do pagamento.');
@@ -123,23 +138,23 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
     } else if (pagamento.status === 'PENDENTE') {
       const token = await obterTokenAdministrador();
       if (!token) throw new Error('Inicie sessão como administrador para sincronizar o pagamento.');
-      const resposta = await fetch(`${api}/payments/${pagamento.remoto_id}`, {
+      const resposta = await fetchComTimeout(`${api}/payments/${pagamento.remoto_id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!resposta.ok) throw new Error(`API respondeu ${resposta.status}.`);
+      if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
       remoto = (await resposta.json()) as PagamentoRemoto;
     } else {
       const token = await obterTokenAdministrador();
       if (!token) throw new Error('Inicie sessão como administrador para confirmar o pagamento no servidor.');
       const acao = pagamento.status === 'CONFIRMADO' ? 'approve' : 'reject';
-      const resposta = await fetch(`${api}/payments/${pagamento.remoto_id}/${acao}`, {
+      const resposta = await fetchComTimeout(`${api}/payments/${pagamento.remoto_id}/${acao}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         ...(acao === 'reject'
           ? { body: JSON.stringify({ reason: pagamento.motivo_rejeicao ?? 'Pagamento reprovado.' }) }
           : {}),
       });
-      if (!resposta.ok) throw new Error(`API respondeu ${resposta.status}.`);
+      if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
       remoto = (await resposta.json()) as PagamentoRemoto;
     }
 
@@ -147,14 +162,14 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
       const token = await obterTokenAdministrador();
       if (!token) throw new Error('Inicie sessão como administrador para confirmar o pagamento no servidor.');
       const acao = pagamento.status === 'CONFIRMADO' ? 'approve' : 'reject';
-      const resposta = await fetch(`${api}/payments/${remoto.id}/${acao}`, {
+      const resposta = await fetchComTimeout(`${api}/payments/${remoto.id}/${acao}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         ...(acao === 'reject'
           ? { body: JSON.stringify({ reason: pagamento.motivo_rejeicao ?? 'Pagamento reprovado.' }) }
           : {}),
       });
-      if (!resposta.ok) throw new Error(`API respondeu ${resposta.status}.`);
+      if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
       remoto = (await resposta.json()) as PagamentoRemoto;
     }
 
@@ -197,7 +212,7 @@ export async function sincronizarPagamentosRecebidos() {
   await sincronizarPedidosPendentes();
   await sincronizarPedidosRecebidos();
 
-  const resposta = await fetch(`${api}/payments/pending`, {
+  const resposta = await fetchComTimeout(`${api}/payments/pending`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));

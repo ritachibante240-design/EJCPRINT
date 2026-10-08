@@ -40,31 +40,45 @@ export default function VendasScreen() {
 	const [pendentes, setPendentes] = useState<(Pagamento & { numero_pedido: string; cliente: string })[]>([]);
 	const [pagamentoProcessando, setPagamentoProcessando] = useState<number | null>(null);
 
-	async function carregar() {
-		let erroSincronizacao: unknown;
-		try {
-			await sincronizarTudoPendentes(3, 1200);
-		} catch (erro) {
-			erroSincronizacao = erro;
-			console.warn('Não foi possível atualizar vendas do servidor.', erro);
-		}
-
-		try {
+	async function carregar(mostrarErro = true) {
+		const carregarDadosLocais = async () => {
 			const [dados, pagamentos] = await Promise.all([
 				listarPedidos(),
 				listarPagamentos(),
 			]);
 			setPedidos(dados);
 			setPendentes(pagamentos.filter((item) => item.status === 'PENDENTE'));
+		};
+
+		try {
+			await carregarDadosLocais();
 		} catch (erro) {
 			showAppAlert('Vendas indisponíveis', erro instanceof Error ? erro.message : 'Não foi possível carregar as vendas locais.');
 			return;
 		}
 
-		if (erroSincronizacao) {
+		let erroSincronizacao: unknown;
+		try {
+			await sincronizarTudoPendentes(1, 1200);
+		} catch (erro) {
+			erroSincronizacao = erro;
+			console.warn('Não foi possível atualizar vendas do servidor.', erro);
+		}
+
+		try {
+			await carregarDadosLocais();
+		} catch (erro) {
+			showAppAlert('Vendas indisponíveis', erro instanceof Error ? erro.message : 'Não foi possível carregar as vendas locais.');
+			return;
+		}
+
+		if (erroSincronizacao && mostrarErro) {
+			const detalhe = erroSincronizacao instanceof Error
+				? erroSincronizacao.message
+				: 'O servidor não conseguiu concluir a sincronização.';
 			showAppAlert(
 				'Vendas não atualizadas',
-				'Os dados guardados neste dispositivo foram carregados, mas não foi possível atualizar os pedidos e pagamentos do servidor. Verifique a ligação e tente novamente.'
+				`Os dados guardados neste dispositivo foram carregados, mas não foi possível atualizar os pedidos e pagamentos do servidor.\n\nMotivo: ${detalhe}\n\nVerifique a ligação ou inicie sessão novamente e tente atualizar.`
 			);
 		}
 	}
@@ -153,7 +167,7 @@ export default function VendasScreen() {
 		try {
 			if (aprovar) await confirmarPagamentoAdmin(id);
 			else await rejeitarPagamento(id, 'Comprovativo incorreto');
-			await carregar();
+			void carregar(false);
 			showAppAlert(aprovar ? 'Pagamento aprovado' : 'Pagamento reprovado', aprovar ? 'O pagamento entrou no Caixa.' : 'O cliente poderá enviar um novo comprovativo.');
 		} catch (erro) {
 			showAppAlert('Não foi possível processar', erro instanceof Error ? erro.message : 'Pagamento já analisado ou indisponível.');
@@ -563,6 +577,4 @@ const styles = StyleSheet.create({
 		marginTop: 18,
 	},
 });
-
-
 
