@@ -1,4 +1,4 @@
-import { db } from '../database/database';
+import { db, executarTransacaoLocal } from '../database/database';
 import { calcularImpressao } from '../utils/calcularImpressao';
 import { obterCustoTintaPorPagina } from '../utils/custosImpressao';
 import { sincronizarPedidoLocal } from './sincronizacaoPedidoService';
@@ -93,6 +93,15 @@ const proximosEstados: Record<string, string> = {
   'Em preparação': 'Em impressão',
   'Em impressão': 'Pronto para levantamento',
   'Pronto para levantamento': 'Entregue',
+};
+
+const estadosRemotosParaLocal: Record<string, string> = {
+  RECEIVED: 'Pedido recebido',
+  PREPARING: 'Em preparação',
+  PRINTING: 'Em impressão',
+  READY_FOR_PICKUP: 'Pronto para levantamento',
+  DELIVERED: 'Entregue',
+  CANCELLED: 'Cancelado',
 };
 
 export async function criarPedido(pedido: NovoPedido) {
@@ -221,50 +230,85 @@ export async function atualizarEstadoPedido(
   id: number,
   novoEstado: string
 ) {
-  await db.withExclusiveTransactionAsync(async (transaction) => {
-    const pedido = await transaction.getFirstAsync<Pedido>(
-      'SELECT * FROM pedidos WHERE id = ?',
-      id
+  const pedido = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', id);
+  if (!pedido) throw new Error('Pedido não encontrado.');
+  if (!pedido.remoto_id) {
+    throw new Error('O pedido ainda não está no servidor. Ligue à Internet e atualize a lista antes de alterar o estado.');
+  }
+
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
+  if (!apiUrl) throw new Error('A URL do backend não está configurada.');
+  const token = await obterTokenAdministrador();
+  if (!token) throw new Error('Inicie sessão como administrador para alterar o estado do pedido.');
+
+  const estadoResponse = await fetch(`${apiUrl}/orders/${encodeURIComponent(pedido.remoto_id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const estadoBody = await estadoResponse.json().catch(() => null) as {
+    status?: string;
+    message?: unknown;
+  } | null;
+  if (!estadoResponse.ok) {
+    throw new Error(typeof estadoBody?.message === 'string'
+      ? estadoBody.message
+      : `API respondeu ${estadoResponse.status} ao confirmar o estado do pedido.`);
+  }
+
+  const estadoServidor = estadoBody?.status ? estadosRemotosParaLocal[estadoBody.status] : undefined;
+  if (!estadoServidor) throw new Error('O servidor retornou um estado de pedido inválido.');
+  if (estadoServidor !== pedido.estado) {
+    await executarTransacaoLocal(async (transaction) => {
+      await transaction.runAsync(
+        `UPDATE pedidos
+         SET estado = ?, sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL
+         WHERE id = ?`,
+        estadoServidor,
+        id
+      );
+    });
+    throw new Error(
+      `O estado atualizado no servidor é "${estadoServidor}". Atualizei a lista; confira o pedido antes de tentar novamente.`
     );
+  }
 
-    if (!pedido) {
-      throw new Error('Pedido não encontrado.');
-    }
+  if (proximosEstados[estadoServidor] !== novoEstado) {
+    throw new Error(`Não é possível alterar um pedido de "${estadoServidor}" para "${novoEstado}".`);
+  }
+  if (novoEstado === 'Em impressão') {
+    throw new Error('Inicie a impressão para reservar o papel no stock.');
+  }
 
-    if (novoEstado === 'Em preparação') {
-      const sinalNecessario = pedido.total * 0.5;
-      const valorConfirmado = pedido.valor_pago ?? 0;
-      if (valorConfirmado < sinalNecessario) {
-        throw new Error(
-          `Ainda faltam ${(sinalNecessario - valorConfirmado).toFixed(2)} MT para completar o sinal de 50%.`
-        );
-      }
-    }
+  const status = Object.entries(estadosRemotosParaLocal)
+    .find(([, estado]) => estado === novoEstado)?.[0];
+  if (!status) throw new Error(`Estado de pedido não suportado: ${novoEstado}.`);
 
-    if (novoEstado === 'Entregue') {
-      const falta = Math.max(pedido.total - (pedido.valor_pago ?? 0), 0);
-      if (falta > 0.001) {
-        throw new Error(
-          `Ainda faltam ${falta.toFixed(2)} MT. O pedido não pode ser entregue antes do pagamento completo.`
-        );
-      }
-    }
+  const response = await fetch(`${apiUrl}/orders/${encodeURIComponent(pedido.remoto_id)}/status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ status }),
+  });
+  const body = await response.json().catch(() => null) as {
+    status?: string;
+    message?: unknown;
+  } | null;
+  if (!response.ok) {
+    throw new Error(typeof body?.message === 'string' ? body.message : `API respondeu ${response.status}.`);
+  }
 
-    if (proximosEstados[pedido.estado] !== novoEstado) {
-      throw new Error(
-        `Não é possível alterar um pedido de "${pedido.estado}" para "${novoEstado}".`
-      );
-    }
+  const estadoConfirmado = body?.status ? estadosRemotosParaLocal[body.status] : undefined;
+  if (estadoConfirmado !== novoEstado) {
+    throw new Error('O servidor não confirmou a alteração de estado esperada. Atualize a lista e tente novamente.');
+  }
 
-    if (novoEstado === 'Em impressão') {
-      throw new Error(
-        'Inicie a impressão para reservar o papel no stock.'
-      );
-    }
-
+  await executarTransacaoLocal(async (transaction) => {
     await transaction.runAsync(
-      "UPDATE pedidos SET estado = ?, sincronizacao_estado = 'PENDENTE' WHERE id = ?",
-      novoEstado,
+      `UPDATE pedidos
+       SET estado = ?, sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL
+       WHERE id = ?`,
+      estadoConfirmado,
       id
     );
   });
@@ -301,7 +345,7 @@ export async function iniciarImpressao(
   let pedido = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', pedidoId);
   if (!pedido) throw new Error('Pedido não encontrado.');
 
-  if (!pedido.remoto_id) {
+  if (!pedido.remoto_id || (pedido.estado === 'Em preparação' && pedido.sincronizacao_estado === 'PENDENTE')) {
     await sincronizarPedidoLocal(pedido);
     pedido = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', pedidoId);
   }
@@ -313,6 +357,47 @@ export async function iniciarImpressao(
   if (!apiUrl) throw new Error('A URL do backend não está configurada.');
   const token = await obterTokenAdministrador();
   if (!token) throw new Error('Inicie sessão como administrador para iniciar a impressão.');
+
+  const estadosLocais: Record<string, string> = {
+    RECEIVED: 'Pedido recebido',
+    PREPARING: 'Em preparação',
+    PRINTING: 'Em impressão',
+    READY_FOR_PICKUP: 'Pronto para levantamento',
+    DELIVERED: 'Entregue',
+    CANCELLED: 'Cancelado',
+  };
+  const estadoResponse = await fetch(`${apiUrl}/orders/${encodeURIComponent(pedido.remoto_id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const estadoBody = await estadoResponse.json().catch(() => null) as {
+    status?: string;
+    message?: unknown;
+  } | null;
+  if (!estadoResponse.ok) {
+    const message = typeof estadoBody?.message === 'string'
+      ? estadoBody.message
+      : `API respondeu ${estadoResponse.status} ao confirmar o estado do pedido.`;
+    throw new Error(message);
+  }
+  const estadoRemoto = estadoBody?.status;
+  if (!estadoRemoto || !Object.prototype.hasOwnProperty.call(estadosLocais, estadoRemoto)) {
+    throw new Error('O servidor retornou um estado de pedido inválido.');
+  }
+  if (estadoRemoto !== 'PREPARING' && estadoRemoto !== 'PRINTING') {
+    const estadoAtual = estadosLocais[estadoRemoto];
+    await executarTransacaoLocal(async (transaction) => {
+      await transaction.runAsync(
+        `UPDATE pedidos
+         SET estado = ?, sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL
+         WHERE id = ?`,
+        estadoAtual,
+        pedidoId
+      );
+    });
+    throw new Error(
+      `O servidor confirma que o pedido está "${estadoAtual}", e não "Em preparação". Atualizei a lista; confira o estado antes de tentar novamente.`
+    );
+  }
 
   const usaPapel = ['Impressão P/B', 'Fotocópia P/B', 'Colorida simples', 'Colorida com imagens'].includes(pedido.servico);
   const externalReference = `start-print-${pedido.sync_chave ?? pedido.remoto_id}`;
@@ -334,20 +419,22 @@ export async function iniciarImpressao(
   const custoPapel = usaPapel ? pedido.folhas_necessarias * custoPapelUnitario : 0;
   const custoTintaPorPagina = obterCustoTintaPorPagina(pedido.servico);
   const custoTinta = pedido.numero_paginas * pedido.numero_copias * custoTintaPorPagina;
-  await db.runAsync(
-    `UPDATE pedidos
-     SET estado = ?, sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL,
-         stock_descontado = ?, custo_papel_unitario = ?, custo_papel = ?,
-         custo_tinta_por_pagina = ?, custo_tinta = ?
-     WHERE id = ?`,
-    'Em impressão',
-    usaPapel ? 1 : 0,
-    custoPapelUnitario,
-    custoPapel,
-    custoTintaPorPagina,
-    custoTinta,
-    pedidoId
-  );
+  await executarTransacaoLocal(async (transaction) => {
+    await transaction.runAsync(
+      `UPDATE pedidos
+       SET estado = ?, sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL,
+           stock_descontado = ?, custo_papel_unitario = ?, custo_papel = ?,
+           custo_tinta_por_pagina = ?, custo_tinta = ?
+       WHERE id = ?`,
+      'Em impressão',
+      usaPapel ? 1 : 0,
+      custoPapelUnitario,
+      custoPapel,
+      custoTintaPorPagina,
+      custoTinta,
+      pedidoId
+    );
+  });
 }
 
 export type EstatisticasPedidos = {
@@ -468,7 +555,7 @@ export async function registrarPagamento(
     throw new Error('Valor inválido.');
   }
 
-  await db.withExclusiveTransactionAsync(async (transaction) => {
+  await executarTransacaoLocal(async (transaction) => {
     const pedido = await transaction.getFirstAsync<Pedido>(
       'SELECT * FROM pedidos WHERE id = ?',
       pedidoId

@@ -117,6 +117,13 @@ export default function PedidosScreen() {
           : `Pedido atualizado para "${novoEstado}".`,
       );
     } catch (erro) {
+      if (novoEstado === "Em impressão") {
+        try {
+          setPedidos(await listarPedidos());
+        } catch (erroAtualizacao) {
+          console.error("Não foi possível atualizar a lista local de pedidos.", erroAtualizacao);
+        }
+      }
       showAppAlert(
         "Não foi possível continuar",
         erro instanceof Error ? erro.message : "Ocorreu um erro.",

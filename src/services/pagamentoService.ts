@@ -1,4 +1,4 @@
-import { db } from '../database/database';
+import { db, executarTransacaoLocal } from '../database/database';
 import { sincronizarPagamentoLocal } from './sincronizacaoPagamentoService';
 import { obterTokenAdministrador } from './adminAuthService';
 
@@ -54,9 +54,9 @@ export async function registrarPagamento(
     );
   }
 
-  await db.withTransactionAsync(async () => {
+  await executarTransacaoLocal(async (transacao) => {
     const pedido =
-      await db.getFirstAsync<{
+      await transacao.getFirstAsync<{
         id: number;
         numero: string;
         total: number;
@@ -114,7 +114,7 @@ export async function registrarPagamento(
     const agora =
       new Date().toISOString();
 
-    await db.runAsync(
+    await transacao.runAsync(
       `
         INSERT INTO pagamentos (
           pedido_id,
@@ -137,7 +137,7 @@ export async function registrarPagamento(
       agora
     );
 
-    await db.runAsync(
+    await transacao.runAsync(
       `
         UPDATE pedidos
         SET valor_pago = valor_pago + ?
@@ -199,35 +199,35 @@ export const enviarPagamentoPendente = enviarPagamento;
 
 export async function confirmarPagamento(id: number) {
   let pagamentoConfirmado: Pagamento | null = null;
-  await db.withTransactionAsync(async () => {
-    const pagamento = await db.getFirstAsync<Pagamento>('SELECT * FROM pagamentos WHERE id = ?', id);
+  await executarTransacaoLocal(async (transacao) => {
+    const pagamento = await transacao.getFirstAsync<Pagamento>('SELECT * FROM pagamentos WHERE id = ?', id);
     if (!pagamento) throw new Error('Pagamento não encontrado.');
     // O painel pode receber uma atualização enquanto o utilizador ainda tem a lista aberta.
     // Nesse caso, tornar a aprovação idempotente evita uma rejeição não tratada ao tocar duas vezes.
     if (pagamento.status !== 'PENDENTE') return;
     const agora = new Date().toISOString();
-    await db.runAsync("UPDATE pagamentos SET status = 'CONFIRMADO', data_confirmacao = ? WHERE id = ?", agora, id);
-    await db.runAsync('UPDATE pedidos SET valor_pago = valor_pago + ? WHERE id = ?', pagamento.valor, pagamento.pedido_id);
-    await db.runAsync("UPDATE pagamentos SET sincronizacao_estado = 'PENDENTE' WHERE id = ?", id);
-    pagamentoConfirmado = await db.getFirstAsync<Pagamento>('SELECT * FROM pagamentos WHERE id = ?', id);
+    await transacao.runAsync("UPDATE pagamentos SET status = 'CONFIRMADO', data_confirmacao = ? WHERE id = ?", agora, id);
+    await transacao.runAsync('UPDATE pedidos SET valor_pago = valor_pago + ? WHERE id = ?', pagamento.valor, pagamento.pedido_id);
+    await transacao.runAsync("UPDATE pagamentos SET sincronizacao_estado = 'PENDENTE' WHERE id = ?", id);
+    pagamentoConfirmado = await transacao.getFirstAsync<Pagamento>('SELECT * FROM pagamentos WHERE id = ?', id);
   });
   if (pagamentoConfirmado) {
     try {
       await sincronizarPagamentoLocal(pagamentoConfirmado, { propagarErros: true });
     } catch (erro) {
-      await db.withTransactionAsync(async () => {
-        const atual = await db.getFirstAsync<Pagamento>(
+      await executarTransacaoLocal(async (transacao) => {
+        const atual = await transacao.getFirstAsync<Pagamento>(
           'SELECT * FROM pagamentos WHERE id = ?',
           id
         );
         if (atual?.status !== 'CONFIRMADO') return;
-        await db.runAsync(
+        await transacao.runAsync(
           `UPDATE pagamentos
            SET status = 'PENDENTE', data_confirmacao = NULL, sincronizacao_estado = 'PENDENTE'
            WHERE id = ?`,
           id
         );
-        await db.runAsync(
+        await transacao.runAsync(
           'UPDATE pedidos SET valor_pago = MAX(valor_pago - ?, 0) WHERE id = ?',
           atual.valor,
           atual.pedido_id

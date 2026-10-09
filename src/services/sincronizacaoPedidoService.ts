@@ -1,7 +1,6 @@
-import { db } from '../database/database';
+import { db, executarTransacaoLocal } from '../database/database';
 import { fetch as expoFetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
-import { Platform } from 'react-native';
 import { obterTokenAdministrador } from './adminAuthService';
 import type { Pedido } from './pedidoService';
 
@@ -202,9 +201,7 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
     pedido.id,
     syncChave
   );
-  const estado = existente?.sincronizacao_estado === 'PENDENTE'
-    ? existente.estado
-    : estadoRemotoParaLocal[pedido.status];
+  const estado = estadoRemotoParaLocal[pedido.status];
   const valorPago = (pedido.payments ?? [])
     .filter((pagamento) => pagamento.status === 'CONFIRMED')
     .reduce((total, pagamento) => total + pagamento.amountCents, 0) / 100;
@@ -251,7 +248,9 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
         sincronizacao_estado = ?
        WHERE id = ?`,
       ...valores,
-      existente.sincronizacao_estado === 'PENDENTE' ? 'PENDENTE' : 'SINCRONIZADO',
+      existente.sincronizacao_estado === 'PENDENTE' && existente.documento_uri && !existente.documento_remoto_id
+        ? 'PENDENTE'
+        : 'SINCRONIZADO',
       existente.id
     );
     return;
@@ -385,11 +384,7 @@ async function sincronizarPedidosClienteAgora(apenasPedidoId?: number) {
       );
     };
 
-    if (Platform.OS === 'web') {
-      await db.withTransactionAsync(() => guardarEstadoRemoto(db));
-    } else {
-      await db.withExclusiveTransactionAsync(guardarEstadoRemoto);
-    }
+    await executarTransacaoLocal(guardarEstadoRemoto);
   }
 }
 

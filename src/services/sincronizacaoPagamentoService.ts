@@ -1,4 +1,4 @@
-import { db } from '../database/database';
+import { db, executarTransacaoLocal } from '../database/database';
 import { fetch as expoFetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
 import { sincronizarPedidosPendentes, sincronizarPedidosRecebidos } from './sincronizacaoPedidoService';
@@ -69,33 +69,33 @@ async function fetchComTimeout(url: string, init: RequestInit = {}, executarFetc
 }
 
 async function aplicarEstadoRemoto(pagamentoId: number, remoto: PagamentoRemoto) {
-  await db.withTransactionAsync(async () => {
-    const local = await db.getFirstAsync<Pagamento>(
+  await executarTransacaoLocal(async (transacao) => {
+    const local = await transacao.getFirstAsync<Pagamento>(
       'SELECT * FROM pagamentos WHERE id = ?',
       pagamentoId
     );
     if (!local) return;
 
     if (remoto.status === 'CONFIRMED' && local.status === 'PENDENTE') {
-      await db.runAsync(
+      await transacao.runAsync(
         `UPDATE pagamentos SET status = 'CONFIRMADO', data_confirmacao = ? WHERE id = ?`,
         remoto.confirmedAt ?? new Date().toISOString(),
         pagamentoId
       );
-      await db.runAsync(
+      await transacao.runAsync(
         'UPDATE pedidos SET valor_pago = valor_pago + ? WHERE id = ?',
         local.valor,
         local.pedido_id
       );
     } else if (remoto.status === 'REJECTED' && local.status === 'PENDENTE') {
-      await db.runAsync(
+      await transacao.runAsync(
         `UPDATE pagamentos SET status = 'REJEITADO', motivo_rejeicao = ? WHERE id = ?`,
         remoto.rejectionReason ?? 'Pagamento reprovado no servidor.',
         pagamentoId
       );
     }
 
-    await db.runAsync(
+    await transacao.runAsync(
       `UPDATE pagamentos
        SET remoto_id = ?, sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL
        WHERE id = ?`,

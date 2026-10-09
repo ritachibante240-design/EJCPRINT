@@ -1,7 +1,26 @@
 import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let filaEscritas: Promise<void> = Promise.resolve();
+
+function executarNaFilaDeEscrita<T>(operacao: () => Promise<T>): Promise<T> {
+  const anterior = filaEscritas;
+  let libertar!: () => void;
+  filaEscritas = new Promise<void>((resolver) => {
+    libertar = resolver;
+  });
+
+  return (async () => {
+    await anterior;
+    try {
+      return await operacao();
+    } finally {
+      libertar();
+    }
+  })();
+}
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
@@ -19,8 +38,28 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   return dbPromise;
 }
 
+export function executarTransacaoLocal(
+  operacao: (transacao: SQLite.SQLiteDatabase) => Promise<void>
+) {
+  return executarNaFilaDeEscrita(async () => {
+    const database = await getDb();
+    if (Platform.OS === 'web') {
+      return database.withTransactionAsync(() => operacao(database));
+    }
+    return database.withExclusiveTransactionAsync(operacao);
+  });
+}
+
 export const db: SQLite.SQLiteDatabase = new Proxy({} as SQLite.SQLiteDatabase, {
   get(_target, prop: string | symbol) {
+    if (prop === 'runAsync' || prop === 'execAsync') {
+      return (...args: any[]) => executarNaFilaDeEscrita(async () => {
+        const database = await getDb();
+        const metodo = (database as any)[prop];
+        return metodo.apply(database, args);
+      });
+    }
+
     if (prop === 'closeAsync') {
       return async () => {
         if (dbInstance) {
@@ -375,8 +414,8 @@ export async function iniciarBancoDados() {
   );
 
   if (papelA4) {
-    await db.withTransactionAsync(async () => {
-      const duplicados = await db.getAllAsync<{
+    await executarTransacaoLocal(async (transacao) => {
+      const duplicados = await transacao.getAllAsync<{
         id: number;
       }>(
         `
@@ -391,7 +430,7 @@ export async function iniciarBancoDados() {
       );
 
       for (const duplicado of duplicados) {
-        await db.runAsync(
+        await transacao.runAsync(
           `
             UPDATE movimentos_stock
             SET stock_id = ?
@@ -401,7 +440,7 @@ export async function iniciarBancoDados() {
           duplicado.id
         );
 
-        await db.runAsync(
+        await transacao.runAsync(
           `
             UPDATE perdas_stock
             SET stock_id = ?
@@ -411,13 +450,13 @@ export async function iniciarBancoDados() {
           duplicado.id
         );
 
-        await db.runAsync(
+        await transacao.runAsync(
           'DELETE FROM stock WHERE id = ?',
           duplicado.id
         );
       }
 
-      await db.runAsync(
+      await transacao.runAsync(
         `
           UPDATE stock
           SET categoria = ?,

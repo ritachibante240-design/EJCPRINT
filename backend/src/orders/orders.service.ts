@@ -121,8 +121,38 @@ export class OrdersService {
   }
 
   async updateStatus(id: string, status: OrderStatus) {
-    await this.findOne(id);
-    return this.prisma.order.update({ where: { id }, data: { status } });
+    return this.prisma.$transaction(async (transaction) => {
+      const order = await transaction.order.findUnique({
+        where: { id },
+        include: { payments: { where: { status: 'CONFIRMED' }, select: { amountCents: true } } },
+      });
+      if (!order) throw new NotFoundException('Pedido não encontrado.');
+      if (order.status === status) return order;
+
+      const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
+        RECEIVED: ['PREPARING', 'CANCELLED'],
+        PREPARING: ['CANCELLED'],
+        PRINTING: ['READY_FOR_PICKUP'],
+        READY_FOR_PICKUP: ['DELIVERED'],
+        DELIVERED: [],
+        CANCELLED: [],
+      };
+      if (!allowedTransitions[order.status].includes(status)) {
+        throw new BadRequestException(
+          `Não é possível alterar um pedido de "${order.status}" para "${status}".`,
+        );
+      }
+
+      const confirmedCents = order.payments.reduce((total, payment) => total + payment.amountCents, 0);
+      if (status === 'PREPARING' && confirmedCents < order.totalCents * 0.5) {
+        throw new BadRequestException('O sinal de 50% do pedido ainda não está confirmado.');
+      }
+      if (status === 'DELIVERED' && confirmedCents < order.totalCents) {
+        throw new BadRequestException('O pagamento total do pedido ainda não está confirmado.');
+      }
+
+      return transaction.order.update({ where: { id }, data: { status } });
+    });
   }
 
   private newOrderNumber() {
