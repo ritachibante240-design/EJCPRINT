@@ -1,6 +1,7 @@
 import { db } from '../database/database';
 import { fetch as expoFetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
+import { Platform } from 'react-native';
 import { obterTokenAdministrador } from './adminAuthService';
 import type { Pedido } from './pedidoService';
 
@@ -282,7 +283,17 @@ export async function sincronizarPedidosRecebidos() {
   for (const pedido of pedidos) await guardarPedidoRemoto(pedido);
 }
 
-export async function sincronizarPedidosCliente(apenasPedidoId?: number) {
+let filaSincronizacaoCliente: Promise<void> = Promise.resolve();
+
+export function sincronizarPedidosCliente(apenasPedidoId?: number) {
+  const sincronizacao = filaSincronizacaoCliente.then(
+    () => sincronizarPedidosClienteAgora(apenasPedidoId)
+  );
+  filaSincronizacaoCliente = sincronizacao.catch(() => undefined);
+  return sincronizacao;
+}
+
+async function sincronizarPedidosClienteAgora(apenasPedidoId?: number) {
   const apiUrl = obterUrlApi();
   if (!apiUrl) return;
 
@@ -307,9 +318,9 @@ export async function sincronizarPedidosCliente(apenasPedidoId?: number) {
       throw new Error('O servidor retornou um pedido diferente do solicitado.');
     }
 
-    await db.withTransactionAsync(async () => {
+    const guardarEstadoRemoto = async (transacao: typeof db) => {
       for (const pagamento of remoto.payments) {
-        const existente = await db.getFirstAsync<PagamentoLocalSyncStatus>(
+        const existente = await transacao.getFirstAsync<PagamentoLocalSyncStatus>(
           `SELECT id, comprovativo_uri, comprovativo_nome
            FROM pagamentos
            WHERE remoto_id = ? OR sync_chave = ?
@@ -319,7 +330,7 @@ export async function sincronizarPedidosCliente(apenasPedidoId?: number) {
         );
         const status = estadoPagamentoRemotoParaLocal[pagamento.status];
         if (existente) {
-          await db.runAsync(
+          await transacao.runAsync(
             `UPDATE pagamentos SET
               pedido_id = ?, valor = ?, metodo = ?, referencia = ?, data_criacao = ?,
               tipo = ?, status = ?, comprovativo_nome = ?, data_confirmacao = ?,
@@ -341,7 +352,7 @@ export async function sincronizarPedidosCliente(apenasPedidoId?: number) {
             existente.id
           );
         } else {
-          await db.runAsync(
+          await transacao.runAsync(
             `INSERT INTO pagamentos (
               pedido_id, valor, metodo, referencia, data_criacao, tipo, status,
               comprovativo_nome, comprovativo_uri, data_confirmacao, motivo_rejeicao,
@@ -366,13 +377,19 @@ export async function sincronizarPedidosCliente(apenasPedidoId?: number) {
       const valorPagoRemoto = remoto.payments
         .filter((pagamento) => pagamento.status === 'CONFIRMED')
         .reduce((total, pagamento) => total + pagamento.amountCents, 0) / 100;
-      await db.runAsync(
+      await transacao.runAsync(
         'UPDATE pedidos SET estado = ?, valor_pago = ? WHERE id = ?',
         estadoRemotoParaLocal[remoto.status],
         valorPagoRemoto,
         pedido.id
       );
-    });
+    };
+
+    if (Platform.OS === 'web') {
+      await db.withTransactionAsync(() => guardarEstadoRemoto(db));
+    } else {
+      await db.withExclusiveTransactionAsync(guardarEstadoRemoto);
+    }
   }
 }
 
