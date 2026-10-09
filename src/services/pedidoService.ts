@@ -1,6 +1,5 @@
 import { db, executarTransacaoLocal } from '../database/database';
 import { calcularImpressao } from '../utils/calcularImpressao';
-import { obterCustoTintaPorPagina } from '../utils/custosImpressao';
 import { sincronizarPedidoLocal } from './sincronizacaoPedidoService';
 import { obterTokenAdministrador } from './adminAuthService';
 
@@ -409,16 +408,24 @@ export async function iniciarImpressao(
   const body = await response.json().catch(() => null) as {
     message?: unknown;
     stockItem?: { averageUnitCost?: number } | null;
+    costs?: { paper: number; ink: number; inkCostPerPage: number; wasteReserve: number; total: number };
   } | null;
   if (!response.ok) {
     const message = typeof body?.message === 'string' ? body.message : `API respondeu ${response.status}.`;
     throw new Error(message);
   }
 
+  const costs = body?.costs;
+  if (
+    !costs ||
+    !Number.isFinite(costs.paper) ||
+    !Number.isFinite(costs.ink) ||
+    !Number.isFinite(costs.inkCostPerPage) ||
+    !Number.isFinite(costs.total)
+  ) {
+    throw new Error('O backend não devolveu o cálculo de custos da impressão. Atualize o backend e tente novamente.');
+  }
   const custoPapelUnitario = body?.stockItem?.averageUnitCost ?? 0;
-  const custoPapel = usaPapel ? pedido.folhas_necessarias * custoPapelUnitario : 0;
-  const custoTintaPorPagina = obterCustoTintaPorPagina(pedido.servico);
-  const custoTinta = pedido.numero_paginas * pedido.numero_copias * custoTintaPorPagina;
   await executarTransacaoLocal(async (transaction) => {
     await transaction.runAsync(
       `UPDATE pedidos
@@ -429,9 +436,9 @@ export async function iniciarImpressao(
       'Em impressão',
       usaPapel ? 1 : 0,
       custoPapelUnitario,
-      custoPapel,
-      custoTintaPorPagina,
-      custoTinta,
+      costs.paper,
+      costs.inkCostPerPage,
+      costs.ink,
       pedidoId
     );
   });

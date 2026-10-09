@@ -269,6 +269,17 @@ export async function definirCustoInicialStock(
   return normalizarItemRemoto(custoRemoto);
 }
 
+export async function aplicarCustosPadraoImpressao() {
+  const resultado = await exigirStockRemoto<any[]>('/inventory/cost-calculator/apply-defaults', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      externalReference: `print-cost-defaults-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
+  return resultado.map(normalizarItemRemoto);
+}
+
 export async function registrarDesperdicio(
   stockId: number | string,
   quantidade: number,

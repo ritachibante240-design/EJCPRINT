@@ -45,6 +45,13 @@ export class StartPrintDto {
   externalReference!: string;
 }
 
+export class ApplyPrintCostDefaultsDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
+  externalReference!: string;
+}
+
 export class WasteStockDto extends StockOperationDto {
   @IsOptional()
   @IsString()

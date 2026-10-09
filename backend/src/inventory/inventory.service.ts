@@ -12,11 +12,39 @@ const PAPER_SERVICES = new Set([
   'Colorida com imagens',
 ]);
 
-const INK_COST_PER_PAGE: Record<string, number> = {
-  'Impressão P/B': 0.044,
-  'Colorida simples': 0,
-  'Colorida com imagens': 0,
-};
+const PRINT_COST_DEFAULTS = {
+  paperCostPerSheet: 0.7,
+  blackInkBottleCost: 200,
+  blackInkYieldPages: 4500,
+  colorInkSetCost: 600,
+  colorInkYieldPages: 7500,
+  wasteReserveRate: 0.1,
+} as const;
+
+function calculatePrintCosts(input: {
+  service: string;
+  pageCount: number;
+  copyCount: number;
+  sheetsRequired: number;
+  paperCostPerSheet: number;
+}) {
+  const paperCost = input.sheetsRequired * input.paperCostPerSheet;
+  const printedPages = input.pageCount * input.copyCount;
+  const inkCostPerPage = input.service === 'Impressão P/B' || input.service === 'Fotocópia P/B'
+    ? PRINT_COST_DEFAULTS.blackInkBottleCost / PRINT_COST_DEFAULTS.blackInkYieldPages
+    : input.service === 'Colorida simples' || input.service === 'Colorida com imagens'
+      ? PRINT_COST_DEFAULTS.colorInkSetCost / PRINT_COST_DEFAULTS.colorInkYieldPages
+      : 0;
+  const inkCost = printedPages * inkCostPerPage;
+  const wasteReserve = (paperCost + inkCost) * PRINT_COST_DEFAULTS.wasteReserveRate;
+  return {
+    paper: paperCost * (1 + PRINT_COST_DEFAULTS.wasteReserveRate),
+    ink: inkCost * (1 + PRINT_COST_DEFAULTS.wasteReserveRate),
+    inkCostPerPage: inkCostPerPage * (1 + PRINT_COST_DEFAULTS.wasteReserveRate),
+    wasteReserve,
+    total: paperCost + inkCost + wasteReserve,
+  };
+}
 
 @Injectable()
 export class InventoryService {
@@ -215,6 +243,68 @@ export class InventoryService {
         },
       });
       return transaction.stockItem.update({ where: { id: item.id }, data: { averageUnitCost } });
+    });
+  }
+
+  async applyPrintCostDefaults(externalReference: string) {
+    const reference = externalReference.trim();
+    if (!reference) throw new BadRequestException('Referência da operação inválida.');
+
+    return this.prisma.$transaction(async (transaction) => {
+      const paper = await transaction.stockItem.findFirst({
+        where: { normalizedName: { in: ['papel a4', 'a4'] } },
+      });
+      const ink = await transaction.stockItem.findFirst({
+        where: { normalizedName: 'tinta-epson l3252' },
+      });
+      if (!paper) throw new NotFoundException('Material Papel A4 não está cadastrado no stock.');
+      if (!ink) throw new NotFoundException('Material Tinta Epson L3252 não está cadastrado no stock.');
+      if (paper.unit.trim().toLowerCase() !== 'folhas') {
+        throw new BadRequestException('O Papel A4 precisa estar controlado em folhas para aplicar o custo por folha.');
+      }
+      if (!['pacotes', 'frascos'].includes(ink.unit.trim().toLowerCase())) {
+        throw new BadRequestException('A Tinta Epson L3252 precisa estar controlada em pacotes ou frascos.');
+      }
+      if (ink.quantity > 0 && ink.unit.trim().toLowerCase() !== 'frascos') {
+        throw new BadRequestException('Converta o stock de tinta para frascos antes de aplicar a correção de custo.');
+      }
+
+      const materials = [
+        { item: paper, newUnitCost: PRINT_COST_DEFAULTS.paperCostPerSheet, key: 'paper' },
+        { item: ink, newUnitCost: PRINT_COST_DEFAULTS.blackInkBottleCost, key: 'ink' },
+      ];
+      const result = [];
+      for (const { item, newUnitCost, key } of materials) {
+        const movementReference = `${reference}:${key}`;
+        const previous = await transaction.stockMovement.findUnique({
+          where: { externalReference: movementReference },
+          include: { stockItem: true },
+        });
+        if (previous) {
+          result.push(previous.stockItem);
+          continue;
+        }
+
+        await transaction.stockMovement.create({
+          data: {
+            externalReference: movementReference,
+            stockItemId: item.id,
+            type: 'CORRECAO_CUSTO',
+            quantity: 0,
+            amountCents: Math.round((newUnitCost - item.averageUnitCost) * item.quantity * 100),
+            unitCost: newUnitCost,
+            reason: `Atualização do custo de referência para trabalhos futuros (${item.averageUnitCost.toFixed(4)} → ${newUnitCost.toFixed(4)} MT/${item.unit})`,
+          },
+        });
+        result.push(await transaction.stockItem.update({
+          where: { id: item.id },
+          data: {
+            averageUnitCost: newUnitCost,
+            ...(key === 'ink' ? { unit: 'frascos' } : {}),
+          },
+        }));
+      }
+      return result;
     });
   }
 
@@ -425,7 +515,20 @@ export class InventoryService {
         where: { orderId, type: 'CONSUMO_PEDIDO' },
         include: { stockItem: true },
       });
-      if (previous) return { order, stockItem: previous.stockItem, movement: previous };
+      if (previous) {
+        return {
+          order,
+          stockItem: previous.stockItem,
+          movement: previous,
+          costs: calculatePrintCosts({
+            service: order.service,
+            pageCount: order.pageCount,
+            copyCount: order.copyCount,
+            sheetsRequired: order.sheetsRequired,
+            paperCostPerSheet: previous.unitCost ?? previous.stockItem.averageUnitCost,
+          }),
+        };
+      }
       if (order.status === 'PRINTING' && !PAPER_SERVICES.has(order.service)) {
         return { order, stockItem: null, movement: null };
       }
@@ -438,7 +541,18 @@ export class InventoryService {
 
       if (!PAPER_SERVICES.has(order.service)) {
         const updatedOrder = await transaction.order.update({ where: { id: orderId }, data: { status: 'PRINTING' } });
-        return { order: updatedOrder, stockItem: null, movement: null };
+        return {
+          order: updatedOrder,
+          stockItem: null,
+          movement: null,
+          costs: calculatePrintCosts({
+            service: order.service,
+            pageCount: order.pageCount,
+            copyCount: order.copyCount,
+            sheetsRequired: 0,
+            paperCostPerSheet: 0,
+          }),
+        };
       }
 
       const paper = await transaction.stockItem.findUnique({ where: { normalizedName: 'papel a4' } })
@@ -467,7 +581,18 @@ export class InventoryService {
         data: { quantity: { decrement: order.sheetsRequired } },
       });
       const updatedOrder = await transaction.order.update({ where: { id: orderId }, data: { status: 'PRINTING' } });
-      return { order: updatedOrder, stockItem, movement };
+      return {
+        order: updatedOrder,
+        stockItem,
+        movement,
+        costs: calculatePrintCosts({
+          service: order.service,
+          pageCount: order.pageCount,
+          copyCount: order.copyCount,
+          sheetsRequired: order.sheetsRequired,
+          paperCostPerSheet: paper.averageUnitCost,
+        }),
+      };
     });
   }
 

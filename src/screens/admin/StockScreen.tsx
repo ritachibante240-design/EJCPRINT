@@ -26,6 +26,7 @@ import {
   removerStock,
   registrarCompraStock,
   definirCustoInicialStock,
+  aplicarCustosPadraoImpressao,
   ajustarQuantidadeStock,
   registrarDesperdicio,
   listarPerdasStock,
@@ -61,6 +62,7 @@ export default function StockScreen() {
   const [modalCustoInicial, setModalCustoInicial] = useState(false);
   const [modalDesperdicio, setModalDesperdicio] = useState(false);
   const [modalAjuste, setModalAjuste] = useState(false);
+  const [modalCalculadora, setModalCalculadora] = useState(false);
   const [itemSelecionado, setItemSelecionado] =
     useState<ItemStock | null>(null);
 
@@ -400,6 +402,35 @@ export default function StockScreen() {
     finally { setProcessandoStock(false); }
   }
 
+  async function confirmarAplicacaoCustos() {
+    if (processandoStock) return;
+    try {
+      setProcessandoStock(true);
+      await aplicarCustosPadraoImpressao();
+      setModalCalculadora(false);
+      await carregar();
+      showAppAlert(
+        'Custos corrigidos',
+        'Os custos de Papel A4 e Tinta Epson L3252 foram atualizados no servidor. A alteração vale para novas impressões; os custos dos pedidos já impressos foram mantidos.'
+      );
+    } catch (erro) {
+      showAppAlert('Erro', erro instanceof Error ? erro.message : 'Não foi possível atualizar os custos.');
+    } finally {
+      setProcessandoStock(false);
+    }
+  }
+
+  function pedirConfirmacaoAplicacaoCustos() {
+    showAppAlert(
+      'Aplicar calculadora de custos?',
+      'Papel A4: 0,70 MT/folha. Tinta Epson L3252: 200 MT por frasco. A tinta passará a ser controlada em frascos. Não altera quantidades, caixa nem custos dos pedidos antigos.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Aplicar', onPress: confirmarAplicacaoCustos },
+      ]
+    );
+  }
+
   function pedirConfirmacaoAjuste() {
     if (!itemSelecionado || processandoStock) return;
     const quantidade = Number(quantidadeReal.replace(',', '.'));
@@ -561,6 +592,10 @@ export default function StockScreen() {
             <Text style={styles.instruction}>
               Selecione um material para registar movimentos. Folhas são contadas em unidades inteiras.
             </Text>
+            <Pressable style={styles.calculatorButton} onPress={() => setModalCalculadora(true)}>
+              <Ionicons name="calculator-outline" size={19} color="#102A43" />
+              <Text style={styles.calculatorButtonText}>Calculadora de custos de impressão</Text>
+            </Pressable>
           </>
         }
         ListEmptyComponent={
@@ -892,6 +927,31 @@ export default function StockScreen() {
         </View>
       </Modal>
 
+      <Modal visible={modalCalculadora} transparent animationType="slide" onRequestClose={() => setModalCalculadora(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View><Text style={styles.modalTitle}>Calculadora de custos</Text><Text style={styles.modalSubtitle}>Estimativa para próximas impressões</Text></View>
+              <Pressable onPress={() => setModalCalculadora(false)}><Ionicons name="close" size={28} color="#102A43" /></Pressable>
+            </View>
+            <View style={styles.calculationBox}>
+              <Text style={styles.calculationLabel}>Valores de referência</Text>
+              <Text style={styles.calculatorDetail}>Papel A4: 0,70 MT por folha</Text>
+              <Text style={styles.calculatorDetail}>Tinta preta: 200 MT ÷ 4.500 páginas = {(200 / 4500).toFixed(4)} MT/página</Text>
+              <Text style={styles.calculatorDetail}>Tintas C/M/Y: 600 MT ÷ 7.500 páginas = {(600 / 7500).toFixed(4)} MT/página</Text>
+              <Text style={styles.calculatorDetail}>Reserva para desperdício e limpeza: 10%</Text>
+            </View>
+            <View style={styles.calculationBox}>
+              <Text style={styles.calculationLabel}>Custo estimado por página simples, com reserva</Text>
+              <Text style={styles.calculationValue}>Preto e branco: {((0.7 + 200 / 4500) * 1.1).toFixed(3)} MT</Text>
+              <Text style={styles.calculationValue}>A cores: {((0.7 + 600 / 7500) * 1.1).toFixed(3)} MT</Text>
+            </View>
+            <Text style={styles.initialCostHint}>O servidor calcula o papel pelas folhas realmente usadas (incluindo frente e verso) e acrescenta a tinta e a reserva. Aplicar corrige o custo médio do stock, sem alterar os custos dos pedidos já impressos.</Text>
+            <ActionButton title="Aplicar custos para próximos pedidos" loading={processandoStock} onPress={pedirConfirmacaoAplicacaoCustos} style={styles.confirmButton} />
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={modalDesperdicio} transparent animationType="slide" onRequestClose={() => setModalDesperdicio(false)}>
         <View style={styles.modalOverlay}><View style={styles.modalContent}>
           <Text style={styles.modalTitle}>Registar desperdício</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
@@ -957,6 +1017,8 @@ const styles = StyleSheet.create({
     color: '#627D98',
     marginVertical: 20,
   },
+  calculatorButton: { minHeight: 48, borderRadius: 11, borderWidth: 1, borderColor: '#BCCCDC', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 18 },
+  calculatorButtonText: { color: '#102A43', fontWeight: '700' },
 
   card: {
     backgroundColor: '#FFFFFF',
@@ -1262,10 +1324,10 @@ const styles = StyleSheet.create({
   calculationBox: { backgroundColor: '#F0F4F8', borderRadius: 12, padding: 14, marginTop: 15 },
   calculationLabel: { color: '#627D98', fontSize: 12 },
   calculationValue: { color: '#102A43', fontSize: 18, fontWeight: 'bold', marginTop: 3 },
+  calculatorDetail: { color: '#334E68', marginTop: 7 },
   confirmButton: { backgroundColor: '#102A43', minHeight: 55, borderRadius: 12, marginTop: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   confirmButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
   initialCostButton: { minHeight: 44, borderWidth: 1, borderColor: '#BCCCDC', borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 6 },
   initialCostText: { color: '#102A43', fontWeight: 'bold' },
   initialCostHint: { color: '#627D98', fontSize: 12, lineHeight: 18, marginTop: 12 },
 });
-
