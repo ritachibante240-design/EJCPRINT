@@ -282,14 +282,19 @@ export async function sincronizarPedidosRecebidos() {
   for (const pedido of pedidos) await guardarPedidoRemoto(pedido);
 }
 
-export async function sincronizarPedidosCliente() {
+export async function sincronizarPedidosCliente(apenasPedidoId?: number) {
   const apiUrl = obterUrlApi();
   if (!apiUrl) return;
 
-  await sincronizarPedidosPendentes();
-  const pedidos = await db.getAllAsync<Pedido>(
-    'SELECT * FROM pedidos WHERE remoto_id IS NOT NULL ORDER BY id ASC'
-  );
+  if (apenasPedidoId === undefined) await sincronizarPedidosPendentes();
+  const pedidos = apenasPedidoId === undefined
+    ? await db.getAllAsync<Pedido>(
+      'SELECT * FROM pedidos WHERE remoto_id IS NOT NULL ORDER BY id ASC'
+    )
+    : await db.getAllAsync<Pedido>(
+      'SELECT * FROM pedidos WHERE remoto_id IS NOT NULL AND id = ?',
+      apenasPedidoId
+    );
 
   for (const pedido of pedidos) {
     if (!pedido.remoto_id) continue;
