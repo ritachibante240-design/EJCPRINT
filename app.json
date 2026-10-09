@@ -32,8 +32,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "4d056e49-b985-44a7-90db-949b34d5d410"
+        "projectId": "ff1ebe02-0224-494f-b14d-0e8c87d3ec47"
       }
-    }
+    },
+    "owner": "pogramador"
   }
 }
