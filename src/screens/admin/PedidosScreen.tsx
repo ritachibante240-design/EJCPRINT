@@ -530,6 +530,12 @@ export default function PedidosScreen() {
               <Text style={styles.detailLabel}>Contacto</Text>
               <Text style={styles.detailValue}>{item.contacto}</Text>
             </View>
+            {item.instrucoes && (
+              <View style={styles.instructionsBlock}>
+                <Text style={styles.detailLabel}>Tema e instruções do cliente</Text>
+                <Text style={styles.instructionsText}>{item.instrucoes}</Text>
+              </View>
+            )}
             <View style={styles.detailLine}>
               <Text style={styles.detailLabel}>Documento</Text>
               <Text style={styles.detailValue}>
@@ -917,6 +923,13 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 10,
   },
+  instructionsBlock: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#F0F4F8",
+  },
+  instructionsText: { color: "#334E68", lineHeight: 20, marginTop: 5 },
   detailLabel: { color: "#829AB1", flex: 1 },
   detailValue: {
     color: "#243B53",

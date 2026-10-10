@@ -13,6 +13,7 @@ type PedidoRemoto = {
   customerName: string;
   customerPhone: string;
   service: string;
+  instructions?: string | null;
   unitPriceCents: number;
   pageCount: number;
   copyCount: number;
@@ -27,7 +28,7 @@ type PedidoRemoto = {
   payments?: { id: string; externalReference: string | null; amountCents: number; status: string }[];
 };
 
-type PedidoLocalSync = Pick<Pedido, 'id' | 'remoto_id' | 'sync_chave' | 'estado' | 'sincronizacao_estado' | 'documento_nome' | 'documento_uri' | 'documento_remoto_id'>;
+type PedidoLocalSync = Pick<Pedido, 'id' | 'remoto_id' | 'sync_chave' | 'estado' | 'sincronizacao_estado' | 'documento_nome' | 'documento_uri' | 'documento_remoto_id' | 'instrucoes'>;
 type EstadoClienteRemoto = {
   id: string;
   status: EstadoPedidoRemoto;
@@ -115,6 +116,7 @@ export async function sincronizarPedidoLocal(pedido: Pedido) {
           customerName: pedido.cliente,
           customerPhone: pedido.contacto,
           service: pedido.servico,
+          instructions: pedido.instrucoes ?? undefined,
           unitPrice: pedido.preco_unitario,
           pageCount: pedido.numero_paginas,
           copyCount: pedido.numero_copias,
@@ -197,7 +199,7 @@ export async function sincronizarPedidosPendentes() {
 async function guardarPedidoRemoto(pedido: PedidoRemoto) {
   const syncChave = pedido.externalReference ?? `pedido-remoto-${pedido.id}`;
   const existente = await db.getFirstAsync<PedidoLocalSync>(
-    'SELECT id, remoto_id, sync_chave, estado, sincronizacao_estado, documento_nome, documento_uri, documento_remoto_id FROM pedidos WHERE remoto_id = ? OR sync_chave = ? LIMIT 1',
+    'SELECT id, remoto_id, sync_chave, estado, sincronizacao_estado, documento_nome, documento_uri, documento_remoto_id, instrucoes FROM pedidos WHERE remoto_id = ? OR sync_chave = ? LIMIT 1',
     pedido.id,
     syncChave
   );
@@ -218,6 +220,7 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
     pedido.customerName,
     pedido.customerPhone,
     pedido.service,
+    pedido.instructions ?? existente?.instrucoes ?? null,
     pedido.unitPriceCents / 100,
     pedido.copyCount,
     pedido.totalCents / 100,
@@ -240,7 +243,7 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
   if (existente) {
     await db.runAsync(
       `UPDATE pedidos SET
-        numero = ?, cliente = ?, contacto = ?, servico = ?, preco_unitario = ?,
+        numero = ?, cliente = ?, contacto = ?, servico = ?, instrucoes = ?, preco_unitario = ?,
         quantidade = ?, total = ?, estado = ?, data_criacao = ?, documento_nome = ?,
         documento_uri = ?, documento_remoto_id = ?, numero_paginas = ?,
         numero_copias = ?, frente_verso = ?, folhas_necessarias = ?, valor_pago = ?,
@@ -258,12 +261,12 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
 
   await db.runAsync(
     `INSERT INTO pedidos (
-      numero, cliente, contacto, servico, preco_unitario, quantidade, total, estado,
+      numero, cliente, contacto, servico, instrucoes, preco_unitario, quantidade, total, estado,
       data_criacao, documento_nome, documento_uri, documento_remoto_id, numero_paginas,
       numero_copias, frente_verso, folhas_necessarias,
       valor_pago, tipo_encadernacao, preco_encadernacao, sync_chave, remoto_id,
       sincronizacao_estado
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO')`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO')`,
     ...valores
   );
 }

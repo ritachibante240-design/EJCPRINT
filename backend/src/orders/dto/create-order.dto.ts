@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateOrderDto {
   @IsString()
@@ -13,6 +13,11 @@ export class CreateOrderDto {
 
   @IsString()
   service!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  instructions?: string;
 
   @Transform(({ value }) => Number(value))
   @IsNumber({ maxDecimalPlaces: 2 })

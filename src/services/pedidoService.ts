@@ -7,6 +7,7 @@ export type NovoPedido = {
   cliente: string;
   contacto: string;
   servico: string;
+  instrucoes?: string;
   precoUnitario: number;
   quantidade: number;
   total: number;
@@ -26,6 +27,7 @@ export type Pedido = {
   cliente: string;
   contacto: string;
   servico: string;
+  instrucoes: string | null;
   preco_unitario: number;
   quantidade: number;
   numero_paginas: number;
@@ -148,6 +150,7 @@ export async function criarPedido(pedido: NovoPedido) {
         cliente,
         contacto,
         servico,
+        instrucoes,
         preco_unitario,
         quantidade,
         total,
@@ -162,12 +165,13 @@ export async function criarPedido(pedido: NovoPedido) {
         tipo_encadernacao,
         preco_encadernacao
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     null,
     pedido.cliente,
     pedido.contacto,
     pedido.servico,
+    pedido.instrucoes?.trim() || null,
     pedido.precoUnitario,
     pedido.quantidade,
     totalCentavosCalculado / 100,

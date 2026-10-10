@@ -84,6 +84,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
   const [frenteVerso, setFrenteVerso] = useState(false);
   const [cliente, setCliente] = useState("");
   const [contacto, setContacto] = useState("");
+  const [instrucoesDigitalizacao, setInstrucoesDigitalizacao] = useState("");
   const [documento, setDocumento] =
     useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [formatoDigitalizacao, setFormatoDigitalizacao] = useState<
@@ -218,6 +219,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
         cliente: cliente.trim(),
         contacto: contacto.trim(),
         servico: servicoSelecionado.nome,
+        instrucoes: ehDigitalizacao ? instrucoesDigitalizacao.trim() : undefined,
         precoUnitario: servicoSelecionado.preco,
         quantidade: Number(numeroCopias),
         total,
@@ -237,6 +239,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
       setEtapa(1);
       setCliente("");
       setContacto("");
+      setInstrucoesDigitalizacao("");
       setServicoSelecionado(null);
       setNumeroPaginas("");
       setNumeroCopias("1");
@@ -342,6 +345,26 @@ export default function NovoPedidoScreen({ navigation }: any) {
                   Informe quantas páginas pretende digitalizar.
                 </Text>
               </View>
+            )}
+            {ehDigitalizacao && (
+              <>
+                <Text style={styles.label}>Tema e instruções (opcional)</Text>
+                <Text style={styles.helperText}>
+                  Se pretende que o documento seja preparado com base nas suas informações, escreva aqui o tema e as instruções.
+                </Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={instrucoesDigitalizacao}
+                  onChangeText={setInstrucoesDigitalizacao}
+                  placeholder="Escreva o tema e as instruções"
+                  multiline
+                  maxLength={2000}
+                  textAlignVertical="top"
+                />
+                <Text style={styles.characterCount}>
+                  {instrucoesDigitalizacao.length}/2000
+                </Text>
+              </>
             )}
             {ehFotocopia && (
               <View style={styles.infoBox}>
@@ -492,6 +515,14 @@ export default function NovoPedidoScreen({ navigation }: any) {
               <Text style={styles.summaryLine}>
                 Documento: {numeroPaginas} páginas
               </Text>
+              {ehDigitalizacao && instrucoesDigitalizacao.trim().length > 0 && (
+                <>
+                  <Text style={styles.summaryLine}>Tema e instruções:</Text>
+                  <Text style={styles.instructionsSummary}>
+                    {instrucoesDigitalizacao.trim()}
+                  </Text>
+                </>
+              )}
               <Text style={styles.summaryLine}>Cópias: {numeroCopias}</Text>
               <Text style={styles.summaryLine}>
                 Impressão: {frenteVerso ? "Frente e verso" : "Frente única"}
@@ -646,6 +677,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginBottom: 10,
   },
+  textArea: { minHeight: 110, paddingTop: 12 },
+  helperText: { color: "#627D98", fontSize: 13, lineHeight: 19, marginBottom: 9 },
+  characterCount: { color: "#829AB1", fontSize: 12, textAlign: "right", marginTop: -8, marginBottom: 12 },
   counter: {
     flexDirection: "row",
     alignItems: "center",
@@ -704,6 +738,7 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   summaryLine: { color: "#243B53", marginTop: 12 },
+  instructionsSummary: { color: "#334E68", fontSize: 14, lineHeight: 20, marginTop: 5 },
   separator: { height: 1, backgroundColor: "#E6EAF0", marginVertical: 12 },
   totalLabel: { color: "#627D98" },
   total: { color: "#102A43", fontSize: 30, fontWeight: "bold", marginTop: 3 },

@@ -31,6 +31,7 @@ export class OrdersService {
         customerName: input.customerName.trim(),
         customerPhone: input.customerPhone.trim(),
         service: input.service.trim(),
+        instructions: input.instructions?.trim() || null,
         unitPriceCents,
         pageCount: input.pageCount,
         copyCount: input.copyCount,

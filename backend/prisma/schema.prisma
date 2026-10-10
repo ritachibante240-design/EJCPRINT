@@ -52,6 +52,7 @@ model Order {
   customerName       String
   customerPhone      String
   service            String
+  instructions       String?
   unitPriceCents     Int
   pageCount          Int
   copyCount          Int
