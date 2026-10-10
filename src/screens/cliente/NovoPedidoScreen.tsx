@@ -29,6 +29,13 @@ const servicos: Servico[] = [
   { id: 5, nome: "Digitalização", preco: 15 },
 ];
 
+function calcularPrecoEncadernacao(folhasPorExemplar: number): number | null {
+  if (folhasPorExemplar <= 50) return 30;
+  if (folhasPorExemplar <= 100) return 40;
+  if (folhasPorExemplar <= 200) return 50;
+  return null;
+}
+
 function Progresso({ etapa }: { etapa: number }) {
   return (
     <View style={styles.progressContainer}>
@@ -112,17 +119,22 @@ export default function NovoPedidoScreen({ navigation }: any) {
     if (!Number.isInteger(p) || p <= 0 || !Number.isInteger(c) || c <= 0)
       return null;
     try {
-      return calcularImpressao(p, c, frenteVerso);
+      return calcularImpressao(p, c, frenteVerso && !ehDigitalizacao);
     } catch {
       return null;
     }
-  }, [numeroPaginas, numeroCopias, frenteVerso]);
+  }, [numeroPaginas, numeroCopias, frenteVerso, ehDigitalizacao]);
+  const precoEncadernacaoPorCopia =
+    tipoEncadernacao !== "SEM_ENCADERNACAO" && calculo
+      ? calcularPrecoEncadernacao(calculo.folhasPorCopia)
+      : 0;
+  const necessitaCotacaoEncadernacao =
+    tipoEncadernacao !== "SEM_ENCADERNACAO" &&
+    precoEncadernacaoPorCopia === null;
   const precoEncadernacao =
-    tipoEncadernacao === "ESPIRAL_MEDIA"
-      ? 50
-      : tipoEncadernacao === "ESPIRAL_PEQUENA"
-        ? 35
-        : 0;
+    typeof precoEncadernacaoPorCopia === "number" && calculo
+      ? precoEncadernacaoPorCopia * calculo.numeroCopias
+      : 0;
   const total =
     servicoSelecionado && calculo
       ? Math.round(
@@ -205,6 +217,11 @@ export default function NovoPedidoScreen({ navigation }: any) {
         "Documento necessário",
         "Selecione o documento que pretende imprimir.",
       );
+    if (necessitaCotacaoEncadernacao)
+      return showAppAlert(
+        "Encadernação por cotar",
+        "Para mais de 200 folhas por exemplar, peça ao administrador uma cotação antes de confirmar o pedido.",
+      );
     setEtapa(3);
   }
   async function salvarPedido() {
@@ -213,6 +230,11 @@ export default function NovoPedidoScreen({ navigation }: any) {
       return showAppAlert("Atenção", "Informe o seu contacto.");
     if (!servicoSelecionado || !calculo || (ehImpressao && !documento))
       return showAppAlert("Atenção", "Complete os dados do pedido.");
+    if (necessitaCotacaoEncadernacao)
+      return showAppAlert(
+        "Encadernação por cotar",
+        "Para mais de 200 folhas por exemplar, peça ao administrador uma cotação antes de confirmar o pedido.",
+      );
     try {
       const documentoUri = documento?.uri;
       const p = await criarPedido({
@@ -473,6 +495,10 @@ export default function NovoPedidoScreen({ navigation }: any) {
               </View>
             )}
             <Text style={styles.label}>Encadernação (opcional)</Text>
+            <Text style={styles.helperText}>
+              Por exemplar: 30 MT até 50 folhas, 40 MT de 51 a 100 folhas e 50
+              MT de 101 a 200 folhas.
+            </Text>
             <View style={styles.typeRow}>
               <Pressable
                 style={[
@@ -491,9 +517,23 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 ]}
                 onPress={() => setTipoEncadernacao("ESPIRAL_MEDIA")}
               >
-                <Text>Espiral média +50 MT</Text>
+                <Text>Com encadernação</Text>
               </Pressable>
             </View>
+            {necessitaCotacaoEncadernacao && (
+              <View style={styles.infoBox}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={23}
+                  color="#9C4221"
+                />
+                <Text style={styles.bindingQuoteText}>
+                  {calculo?.folhasPorCopia} folhas por exemplar. Acima de 200
+                  folhas, solicite uma cotação ao administrador antes de
+                  confirmar.
+                </Text>
+              </View>
+            )}
             <View style={styles.navRow}>
               <Pressable style={styles.back} onPress={() => setEtapa(1)}>
                 <Text>Voltar</Text>
@@ -527,6 +567,13 @@ export default function NovoPedidoScreen({ navigation }: any) {
               <Text style={styles.summaryLine}>
                 Impressão: {frenteVerso ? "Frente e verso" : "Frente única"}
               </Text>
+              {tipoEncadernacao !== "SEM_ENCADERNACAO" && calculo && (
+                <Text style={styles.summaryLine}>
+                  Encadernação: {calculo.folhasPorCopia} folhas por exemplar ×{" "}
+                  {calculo.numeroCopias} cópias — {precoEncadernacao.toFixed(2)}{" "}
+                  MT
+                </Text>
+              )}
               <View style={styles.separator} />
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.total}>{total.toFixed(2)} MT</Text>
@@ -739,6 +786,7 @@ const styles = StyleSheet.create({
   },
   summaryLine: { color: "#243B53", marginTop: 12 },
   instructionsSummary: { color: "#334E68", fontSize: 14, lineHeight: 20, marginTop: 5 },
+  bindingQuoteText: { flex: 1, color: "#9C4221", lineHeight: 20 },
   separator: { height: 1, backgroundColor: "#E6EAF0", marginVertical: 12 },
   totalLabel: { color: "#627D98" },
   total: { color: "#102A43", fontSize: 30, fontWeight: "bold", marginTop: 3 },
