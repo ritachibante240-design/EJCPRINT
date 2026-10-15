@@ -269,6 +269,29 @@ export async function definirCustoInicialStock(
   return normalizarItemRemoto(custoRemoto);
 }
 
+export async function definirCustoUnitarioStock(
+  stockId: number | string,
+  custoUnitario: number
+) {
+  if (!Number.isFinite(custoUnitario) || custoUnitario < 0) {
+    throw new Error('O custo unitário deve ser igual ou superior a zero.');
+  }
+  const unitCostCents = Math.round((custoUnitario + Number.EPSILON) * 100);
+  if (!Number.isSafeInteger(unitCostCents) || unitCostCents > 2_147_483_647) {
+    throw new Error('O custo unitário informado é demasiado elevado.');
+  }
+
+  const custoRemoto = await exigirStockRemoto<any>(`/inventory/items/${stockId}/unit-cost`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      unitCostCents,
+      externalReference: `stock-unit-cost-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
+  return normalizarItemRemoto(custoRemoto);
+}
+
 export async function aplicarCustosPadraoImpressao() {
   const resultado = await exigirStockRemoto<any[]>('/inventory/cost-calculator/apply-defaults', {
     method: 'POST',

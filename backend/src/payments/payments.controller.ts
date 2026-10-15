@@ -1,8 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Response } from 'express';
-import { AdminAuthGuard } from '../auth/admin-auth.guard';
+import { AdminAuthGuard, AdminAuthenticatedRequest } from '../auth/admin-auth.guard';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { RejectPaymentDto } from './dto/reject-payment.dto';
@@ -18,7 +18,7 @@ export class PaymentsController {
   create(@Body() body: CreatePaymentDto, @UploadedFile() proof?: Express.Multer.File) { return this.service.create(body, proof); }
   @UseGuards(AdminAuthGuard)
   @Post('admin/confirmed')
-  createConfirmed(@Body() body: CreatePaymentDto) { return this.service.createConfirmed(body); }
+  createConfirmed(@Body() body: CreatePaymentDto, @Req() request: AdminAuthenticatedRequest) { return this.service.createConfirmed(body, request.adminActor); }
   @UseGuards(AdminAuthGuard)
   @Get('pending') pending() { return this.service.pending(); }
   @UseGuards(AdminAuthGuard)
@@ -32,7 +32,7 @@ export class PaymentsController {
     return result.file;
   }
   @UseGuards(AdminAuthGuard)
-  @Patch(':id/approve') approve(@Param('id') id: string) { return this.service.approve(id); }
+  @Patch(':id/approve') approve(@Param('id') id: string, @Req() request: AdminAuthenticatedRequest) { return this.service.approve(id, request.adminActor); }
   @UseGuards(AdminAuthGuard)
-  @Patch(':id/reject') reject(@Param('id') id: string, @Body() body: RejectPaymentDto) { return this.service.reject(id, body.reason); }
+  @Patch(':id/reject') reject(@Param('id') id: string, @Body() body: RejectPaymentDto, @Req() request: AdminAuthenticatedRequest) { return this.service.reject(id, body.reason, request.adminActor); }
 }

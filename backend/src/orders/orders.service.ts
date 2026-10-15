@@ -121,7 +121,7 @@ export class OrdersService {
     return order;
   }
 
-  async updateStatus(id: string, status: OrderStatus) {
+  async updateStatus(id: string, status: OrderStatus, actor = 'Administrador') {
     return this.prisma.$transaction(async (transaction) => {
       const order = await transaction.order.findUnique({
         where: { id },
@@ -152,7 +152,17 @@ export class OrdersService {
         throw new BadRequestException('O pagamento total do pedido ainda não está confirmado.');
       }
 
-      return transaction.order.update({ where: { id }, data: { status } });
+      const updatedOrder = await transaction.order.update({ where: { id }, data: { status } });
+      await transaction.adminAuditLog.create({
+        data: {
+          actor,
+          action: 'ORDER_STATUS_CHANGED',
+          entityType: 'ORDER',
+          entityId: order.id,
+          summary: `Pedido ${order.number}: ${order.status} → ${status}`,
+        },
+      });
+      return updatedOrder;
     });
   }
 

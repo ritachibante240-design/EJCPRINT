@@ -15,7 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useResponsiveContent } from '../../hooks/useResponsive';
 import { showAppAlert } from '../../components/AppAlert';
 import { contarPagamentosPendentes } from '../../services/pagamentoService';
-import { listarStock } from '../../services/stockService';
+import { ItemStock, listarStock } from '../../services/stockService';
 import { colors, fontWeights, radii, spacing } from '../../theme';
 
 
@@ -47,6 +47,7 @@ export default function DashboardScreen({
   const [pedidosHoje, setPedidosHoje] = useState(0);
   const [pagamentosPendentes, setPagamentosPendentes] = useState(0);
   const [stockBaixo, setStockBaixo] = useState(0);
+  const [itensStockBaixo, setItensStockBaixo] = useState<ItemStock[]>([]);
   const [estatisticas, setEstatisticas] =
     useState<EstatisticasPedidos>(estatisticasIniciais);
 
@@ -84,7 +85,9 @@ export default function DashboardScreen({
       setResumoSaidas(saidas);
       setPedidosHoje(totalHoje);
       setPagamentosPendentes(pendentes);
-      setStockBaixo(stock.filter((item) => item.quantidade <= item.stock_minimo).length);
+      const itensBaixos = stock.filter((item) => item.quantidade <= item.stock_minimo);
+      setItensStockBaixo(itensBaixos);
+      setStockBaixo(itensBaixos.length);
     } catch (erro) {
       console.error(
         'Erro ao carregar Dashboard:',
@@ -203,6 +206,32 @@ export default function DashboardScreen({
           <Text style={styles.metricHint}>Itens no mínimo ou abaixo</Text>
         </Pressable>
       </View>
+
+      {itensStockBaixo.length > 0 && (
+        <Pressable
+          style={styles.lowStockAlert}
+          onPress={() => navigation.getParent()?.navigate("Stock")}
+          accessibilityRole="button"
+          accessibilityLabel={`${itensStockBaixo.length} materiais com stock baixo. Abrir gestão de stock.`}
+        >
+          <View style={styles.lowStockHeading}>
+            <Ionicons name="warning-outline" size={20} color={colors.warning} />
+            <Text style={styles.lowStockTitle}>Atenção: stock baixo</Text>
+            <Text style={styles.lowStockCount}>{itensStockBaixo.length}</Text>
+          </View>
+          {itensStockBaixo.slice(0, 4).map((item) => (
+            <Text key={String(item.id)} style={styles.lowStockItem}>
+              {item.nome}: {item.quantidade} {item.unidade} (mínimo {item.stock_minimo})
+            </Text>
+          ))}
+          {itensStockBaixo.length > 4 && (
+            <Text style={styles.lowStockMore}>
+              +{itensStockBaixo.length - 4} material(is) com stock baixo
+            </Text>
+          )}
+          <Text style={styles.lowStockAction}>Abrir materiais para repor</Text>
+        </Pressable>
+      )}
 
       <Text style={styles.sectionTitle}>Estado dos pedidos</Text>
       <View style={styles.row}>
@@ -405,6 +434,19 @@ export default function DashboardScreen({
 
         <Text style={styles.arrow}>›</Text>
       </Pressable>
+
+      <Pressable
+        style={styles.menuButton}
+        onPress={() => navigation.getParent()?.navigate('HistoricoAdmin')}
+      >
+        <View>
+          <Text style={styles.menuTitle}>🧾 Histórico de alterações</Text>
+          <Text style={styles.menuDescription}>
+            Consultar alterações de pedidos, pagamentos e stock
+          </Text>
+        </View>
+        <Text style={styles.arrow}>›</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -464,6 +506,20 @@ const styles = StyleSheet.create({
   metricWarningValue: { color: colors.warning },
   metricDangerValue: { color: colors.danger },
   metricHint: { color: colors.subtle, fontSize: 11, marginTop: spacing.xs },
+  lowStockAlert: {
+    backgroundColor: colors.warningSoft,
+    borderColor: colors.warning,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+  },
+  lowStockHeading: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.xs },
+  lowStockTitle: { color: colors.warning, fontSize: 14, fontWeight: fontWeights.bold, flex: 1 },
+  lowStockCount: { color: colors.warning, fontWeight: fontWeights.bold },
+  lowStockItem: { color: colors.text, fontSize: 12, marginTop: 5 },
+  lowStockMore: { color: colors.muted, fontSize: 11, marginTop: 5 },
+  lowStockAction: { color: colors.brand, fontSize: 12, fontWeight: fontWeights.bold, marginTop: spacing.md },
 
   title: {
     fontSize: 22,

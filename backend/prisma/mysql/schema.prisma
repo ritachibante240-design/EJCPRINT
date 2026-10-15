@@ -109,6 +109,7 @@ model StockMovement {
   quantity          Float
   amountCents       Int?
   unitCost          Float?
+  inkUnitCost       Float?
   reason            String?
   createdAt         DateTime    @default(now())
   expense           Expense?
@@ -132,6 +133,19 @@ model Expense {
 
   @@index([createdAt])
   @@index([type, createdAt])
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actor      String
+  action     String
+  entityType String
+  entityId   String
+  summary    String    @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId, createdAt])
 }
 
 enum UserRole {

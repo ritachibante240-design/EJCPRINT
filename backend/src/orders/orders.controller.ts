@@ -1,8 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Response } from 'express';
-import { AdminAuthGuard } from '../auth/admin-auth.guard';
+import { AdminAuthGuard, AdminAuthenticatedRequest } from '../auth/admin-auth.guard';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrdersService } from './orders.service';
@@ -61,7 +61,7 @@ export class OrdersController {
 
   @UseGuards(AdminAuthGuard)
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body() body: UpdateOrderStatusDto) {
-    return this.ordersService.updateStatus(id, body.status);
+  updateStatus(@Param('id') id: string, @Body() body: UpdateOrderStatusDto, @Req() request: AdminAuthenticatedRequest) {
+    return this.ordersService.updateStatus(id, body.status, request.adminActor);
   }
 }

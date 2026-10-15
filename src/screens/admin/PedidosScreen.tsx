@@ -1,5 +1,5 @@
 import { showAppAlert } from "../../components/AppAlert";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
+  TextInput,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
@@ -39,6 +40,41 @@ const estados = [
   "Pronto para levantamento",
   "Entregue",
 ];
+const opcoesEstadoPedido = [
+  "Todos",
+  "Pedido recebido",
+  "Em preparação",
+  "Em impressão",
+  "Pronto para levantamento",
+  "Entregue",
+  "Cancelado",
+];
+const opcoesPagamento = ["Todos", "Por pagar", "Parcial", "Pago"] as const;
+
+function dataPedidoParaFiltro(valor: string) {
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return "";
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
+function dataFiltroValida(valor: string) {
+  if (!valor) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const [ano, mes, dia] = valor.split("-").map(Number);
+  const data = new Date(ano, mes - 1, dia);
+  return data.getFullYear() === ano && data.getMonth() === mes - 1 && data.getDate() === dia;
+}
+
+function calcularEstadoPagamento(pedido: Pedido) {
+  const totalCentavos = Math.round(Number(pedido.total ?? 0) * 100);
+  const pagoCentavos = Math.round(Number(pedido.valor_pago ?? 0) * 100);
+  if (pagoCentavos >= totalCentavos) return "Pago";
+  if (pagoCentavos > 0) return "Parcial";
+  return "Por pagar";
+}
 
 export default function PedidosScreen() {
   const { isDesktop } = useResponsiveContent(20);
@@ -50,6 +86,30 @@ export default function PedidosScreen() {
     null,
   );
   const [documentoProcessando, setDocumentoProcessando] = useState<number | null>(null);
+  const [busca, setBusca] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("Todos");
+  const [filtroPagamento, setFiltroPagamento] = useState<(typeof opcoesPagamento)[number]>("Todos");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const datasValidas = dataFiltroValida(dataInicio) && dataFiltroValida(dataFim)
+    && !(dataInicio && dataFim && dataInicio > dataFim);
+  const pedidosFiltrados = useMemo(() => {
+    if (!datasValidas) return [];
+    const termo = busca.trim().toLocaleLowerCase();
+    return pedidos.filter((pedido) => {
+      if (
+        termo &&
+        ![pedido.numero, pedido.cliente, pedido.contacto]
+          .some((campo) => campo.toLocaleLowerCase().includes(termo))
+      ) return false;
+      if (filtroEstado !== "Todos" && pedido.estado !== filtroEstado) return false;
+      if (filtroPagamento !== "Todos" && calcularEstadoPagamento(pedido) !== filtroPagamento) return false;
+      const dataPedido = dataPedidoParaFiltro(pedido.data_criacao);
+      if (dataInicio && dataPedido < dataInicio) return false;
+      if (dataFim && dataPedido > dataFim) return false;
+      return true;
+    });
+  }, [busca, dataFim, dataInicio, datasValidas, filtroEstado, filtroPagamento, pedidos]);
 
   async function carregarPedidos(mostrarErro = true) {
     setAtualizando(true);
@@ -679,21 +739,112 @@ export default function PedidosScreen() {
       refreshControl={
         <RefreshControl refreshing={atualizando} onRefresh={() => void carregarPedidos()} />
       }
-      data={pedidos}
+      data={pedidosFiltrados}
       keyExtractor={(item) => item.id.toString()}
       renderItem={renderPedidoSimples}
       ListHeaderComponent={
-        <View style={styles.pageHeader}>
-          <Text style={styles.title}>Pedidos</Text>
-
-          <Text style={styles.subtitle}>{pedidos.length} pedido(s)</Text>
+        <View>
+          <View style={styles.pageHeader}>
+            <Text style={styles.title}>Pedidos</Text>
+            <Text style={styles.subtitle}>
+              {pedidosFiltrados.length} de {pedidos.length} pedido(s)
+            </Text>
+          </View>
+          <View style={styles.filters}>
+            <View style={styles.searchBox}>
+              <Ionicons name="search-outline" size={19} color={colors.subtle} />
+              <TextInput
+                value={busca}
+                onChangeText={setBusca}
+                placeholder="Pesquisar cliente, contacto ou pedido"
+                style={styles.searchInput}
+                accessibilityLabel="Pesquisar pedidos"
+              />
+              {busca.length > 0 && (
+                <Pressable onPress={() => setBusca("")} accessibilityLabel="Limpar pesquisa">
+                  <Ionicons name="close-circle" size={19} color={colors.subtle} />
+                </Pressable>
+              )}
+            </View>
+            <Text style={styles.filterLabel}>Estado do pedido</Text>
+            <View style={styles.filterOptions}>
+              {opcoesEstadoPedido.map((estado) => (
+                <Pressable
+                  key={estado}
+                  style={[styles.filterChip, filtroEstado === estado && styles.filterChipSelected]}
+                  onPress={() => setFiltroEstado(estado)}
+                >
+                  <Text style={[styles.filterChipText, filtroEstado === estado && styles.filterChipTextSelected]}>
+                    {estado}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.filterLabel}>Pagamento</Text>
+            <View style={styles.filterOptions}>
+              {opcoesPagamento.map((estado) => (
+                <Pressable
+                  key={estado}
+                  style={[styles.filterChip, filtroPagamento === estado && styles.filterChipSelected]}
+                  onPress={() => setFiltroPagamento(estado)}
+                >
+                  <Text style={[styles.filterChipText, filtroPagamento === estado && styles.filterChipTextSelected]}>
+                    {estado}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.dateFilters}>
+              <View style={styles.dateField}>
+                <Text style={styles.filterLabel}>De</Text>
+                <TextInput
+                  value={dataInicio}
+                  onChangeText={setDataInicio}
+                  placeholder="AAAA-MM-DD"
+                  style={styles.dateInput}
+                  accessibilityLabel="Filtrar desde a data"
+                />
+              </View>
+              <View style={styles.dateField}>
+                <Text style={styles.filterLabel}>Até</Text>
+                <TextInput
+                  value={dataFim}
+                  onChangeText={setDataFim}
+                  placeholder="AAAA-MM-DD"
+                  style={styles.dateInput}
+                  accessibilityLabel="Filtrar até à data"
+                />
+              </View>
+            </View>
+            <Text style={[styles.dateHint, !datasValidas && styles.dateHintError]}>
+              {!dataFiltroValida(dataInicio) || !dataFiltroValida(dataFim)
+                ? "Use uma data válida no formato AAAA-MM-DD."
+                : dataInicio && dataFim && dataInicio > dataFim
+                  ? "A data inicial deve ser anterior à data final."
+                  : "Datas no formato AAAA-MM-DD"}
+            </Text>
+          </View>
         </View>
       }
       ListEmptyComponent={
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>📦</Text>
-
-          <Text style={styles.emptyTitle}>Nenhum pedido</Text>
+          <Text style={styles.emptyTitle}>
+            {pedidos.length === 0 ? "Nenhum pedido" : "Nenhum pedido corresponde aos filtros"}
+          </Text>
+          {pedidos.length > 0 && (
+            <Pressable
+              style={styles.clearFilters}
+              onPress={() => {
+                setBusca("");
+                setFiltroEstado("Todos");
+                setFiltroPagamento("Todos");
+                setDataInicio("");
+                setDataFim("");
+              }}
+            >
+              <Text style={styles.clearFiltersText}>Limpar filtros</Text>
+            </Pressable>
+          )}
         </View>
       }
     />
@@ -714,6 +865,38 @@ const styles = StyleSheet.create({
   pageHeader: {
     marginBottom: spacing.xl,
   },
+  filters: {
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchBox: {
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+  },
+  searchInput: { flex: 1, color: colors.text, minHeight: 44 },
+  filterLabel: { color: colors.muted, fontSize: 12, fontWeight: fontWeights.semibold, marginTop: spacing.md, marginBottom: spacing.xs },
+  filterOptions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  filterChip: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: radii.pill, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
+  filterChipSelected: { backgroundColor: colors.brandSoft, borderColor: colors.brand },
+  filterChipText: { color: colors.muted, fontSize: 11, fontWeight: fontWeights.medium },
+  filterChipTextSelected: { color: colors.brand, fontWeight: fontWeights.bold },
+  dateFilters: { flexDirection: "row", gap: spacing.md },
+  dateField: { flex: 1 },
+  dateInput: { minHeight: 42, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, paddingHorizontal: spacing.sm, color: colors.text },
+  dateHint: { color: colors.subtle, fontSize: 11, marginTop: spacing.xs },
+  dateHintError: { color: colors.danger },
+  clearFilters: { marginTop: spacing.md, padding: spacing.sm, alignItems: "center" },
+  clearFiltersText: { color: colors.brand, fontWeight: fontWeights.semibold },
 
   title: {
     fontSize: 28,

@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsiveContent } from '../../hooks/useResponsive';
 import { useFocusEffect } from '@react-navigation/native';
 import { listarPedidos, Pedido } from '../../services/pedidoService';
+import { abrirArquivoPedido } from '../../services/arquivoRemotoService';
 import { sincronizarPedidosCliente } from '../../services/sincronizacaoPedidoService';
 import { enviarPagamento, registrarPagamentoDinheiro, determinarTipoPagamento, listarPagamentosPedido, MetodoPagamento, TipoPagamento, Pagamento } from '../../services/pagamentoService';
 import { obterEtapasPedido, obterNomeEstado } from '../../utils/estadoPedido';
@@ -65,7 +66,70 @@ function EstadoSincronizacaoAcompanhamento({
 
 function HistoricoPagamentos({ itens }: { itens: Pagamento[] }) {
   if (itens.length === 0) return null;
-  return <View style={styles.paymentHistory}><Text style={styles.historyTitle}>Histórico de pagamentos</Text>{itens.map((pagamento) => { const confirmado = pagamento.status === 'CONFIRMADO'; const rejeitado = pagamento.status === 'REJEITADO'; return <View key={pagamento.id} style={styles.historyItem}><View style={[styles.historyIcon, confirmado && styles.historyIconSuccess, rejeitado && styles.historyIconRejected]}><Ionicons name={confirmado ? 'checkmark' : rejeitado ? 'close' : 'time-outline'} size={17} color={confirmado ? colors.success : rejeitado ? colors.danger : colors.warning} /></View><View style={{ flex: 1 }}><View style={styles.historyTop}><Text style={styles.historyValue}>{Number(pagamento.valor ?? 0).toFixed(2)} MT</Text><Text style={[styles.historyStatus, confirmado && styles.statusSuccess, rejeitado && styles.statusRejected]}>{confirmado ? 'Confirmado' : rejeitado ? 'Rejeitado' : 'Em análise'}</Text></View><Text style={styles.historyDetails}>{pagamento.tipo} • {pagamento.metodo}</Text>{pagamento.referencia && <Text style={styles.historyReference}>Referência: {pagamento.referencia}</Text>}{rejeitado && pagamento.motivo_rejeicao && <Text style={styles.historyReason}>Motivo: {pagamento.motivo_rejeicao}</Text>}</View></View>; })}</View>;
+  return (
+    <View style={styles.paymentHistory}>
+      <Text style={styles.historyTitle}>Histórico de pagamentos</Text>
+      {itens.map((pagamento) => {
+        const confirmado = pagamento.status === 'CONFIRMADO';
+        const rejeitado = pagamento.status === 'REJEITADO';
+        return (
+          <View key={pagamento.id} style={styles.historyItem}>
+            <View style={[styles.historyIcon, confirmado && styles.historyIconSuccess, rejeitado && styles.historyIconRejected]}>
+              <Ionicons name={confirmado ? 'checkmark' : rejeitado ? 'close' : 'time-outline'} size={17} color={confirmado ? colors.success : rejeitado ? colors.danger : colors.warning} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.historyTop}>
+                <Text style={styles.historyValue}>{Number(pagamento.valor ?? 0).toFixed(2)} MT</Text>
+                <Text style={[styles.historyStatus, confirmado && styles.statusSuccess, rejeitado && styles.statusRejected]}>
+                  {confirmado ? 'Confirmado' : rejeitado ? 'Rejeitado' : 'Em análise'}
+                </Text>
+              </View>
+              <Text style={styles.historyDetails}>{pagamento.tipo} • {pagamento.metodo}</Text>
+              {pagamento.referencia && <Text style={styles.historyReference}>Referência: {pagamento.referencia}</Text>}
+              {pagamento.comprovativo_nome && (
+                <Text style={styles.historyReference} numberOfLines={2}>
+                  Comprovativo enviado: {pagamento.comprovativo_nome}
+                </Text>
+              )}
+              {pagamento.comprovativo_uri && !/^https?:\/\//i.test(pagamento.comprovativo_uri) && (
+                <Pressable
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    minHeight: 40,
+                    marginTop: 4,
+                  }}
+                  onPress={() => {
+                    const nome = pagamento.comprovativo_nome ?? 'comprovativo';
+                    const nomeMinusculo = nome.toLowerCase();
+                    const tipoFicheiro = nomeMinusculo.endsWith('.pdf')
+                      ? 'application/pdf'
+                      : nomeMinusculo.endsWith('.png')
+                        ? 'image/png'
+                        : 'image/jpeg';
+                    void abrirArquivoPedido(pagamento.comprovativo_uri!, nome, tipoFicheiro)
+                      .catch((erro: unknown) => showAppAlert(
+                        'Não foi possível abrir o comprovativo',
+                        erro instanceof Error ? erro.message : 'Tente novamente neste dispositivo.',
+                      ));
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Abrir comprovativo ${pagamento.comprovativo_nome ?? ''}`}
+                >
+                  <Ionicons name="document-text-outline" size={16} color={colors.brand} />
+                  <Text style={{ color: colors.brand, fontSize: 12, fontWeight: fontWeights.semibold }}>
+                    Abrir ficheiro neste dispositivo
+                  </Text>
+                </Pressable>
+              )}
+              {rejeitado && pagamento.motivo_rejeicao && <Text style={styles.historyReason}>Motivo: {pagamento.motivo_rejeicao}</Text>}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 export default function MeusPedidosScreen() {
@@ -75,6 +139,27 @@ export default function MeusPedidosScreen() {
   const [erroAcompanhamento, setErroAcompanhamento] = useState<string | null>(null);
   const [sincronizandoAcompanhamento, setSincronizandoAcompanhamento] = useState(false);
   const sincronizacaoEmCurso = useRef(false);
+  const estadosConhecidos = useRef(new Map<number, string>());
+  const pedidosProntosNotificados = useRef(new Set<number>());
+  const guardarPedidos = useCallback((lista: Pedido[]) => {
+    for (const pedido of lista) {
+      const estadoAnterior = estadosConhecidos.current.get(pedido.id);
+      if (
+        estadoAnterior &&
+        estadoAnterior !== 'Pronto para levantamento' &&
+        pedido.estado === 'Pronto para levantamento' &&
+        !pedidosProntosNotificados.current.has(pedido.id)
+      ) {
+        pedidosProntosNotificados.current.add(pedido.id);
+        showAppAlert(
+          'Pedido pronto',
+          `O pedido ${pedido.numero} está pronto para levantamento.`,
+        );
+      }
+      estadosConhecidos.current.set(pedido.id, pedido.estado);
+    }
+    setPedidos(lista);
+  }, []);
   const carregarPagamentos = useCallback(async (pedidoId: number) => {
     try {
       const dados = await listarPagamentosPedido(pedidoId);
@@ -83,14 +168,14 @@ export default function MeusPedidosScreen() {
       console.warn('Não foi possível carregar os pagamentos do pedido.', error);
     }
   }, []);
-  const atualizarAcompanhamento = useCallback(async (pedidoId: number) => {
+  const atualizarAcompanhamento = useCallback(async (pedidoId?: number) => {
     if (sincronizacaoEmCurso.current) return;
     sincronizacaoEmCurso.current = true;
     setSincronizandoAcompanhamento(true);
     try {
       await sincronizarPedidosCliente(pedidoId);
-      setPedidos(await listarPedidos());
-      await carregarPagamentos(pedidoId);
+      guardarPedidos(await listarPedidos());
+      if (pedidoId !== undefined) await carregarPagamentos(pedidoId);
       setUltimaAtualizacao(new Date().toISOString());
       setErroAcompanhamento(null);
     } catch (erro) {
@@ -103,13 +188,14 @@ export default function MeusPedidosScreen() {
       sincronizacaoEmCurso.current = false;
       setSincronizandoAcompanhamento(false);
     }
-  }, [carregarPagamentos]);
+  }, [carregarPagamentos, guardarPedidos]);
   const carregar = useCallback(async () => {
     try {
-      setPedidos(await listarPedidos());
+      guardarPedidos(await listarPedidos());
       setCarregando(false);
       try {
         await sincronizarPedidosCliente();
+        guardarPedidos(await listarPedidos());
         setUltimaAtualizacao(new Date().toISOString());
         setErroAcompanhamento(null);
       } catch (erro) {
@@ -123,7 +209,7 @@ export default function MeusPedidosScreen() {
           `Os pedidos guardados neste dispositivo continuam disponíveis, mas a atualização do servidor falhou.\n\nMotivo: ${detalhe}`
         );
       }
-      setPedidos(await listarPedidos());
+      guardarPedidos(await listarPedidos());
       if (pedidoAberto !== null) await carregarPagamentos(pedidoAberto);
     } catch (erro) {
       showAppAlert(
@@ -134,21 +220,21 @@ export default function MeusPedidosScreen() {
       setCarregando(false);
       setAtualizando(false);
     }
-  }, [carregarPagamentos, pedidoAberto]);
+  }, [carregarPagamentos, guardarPedidos, pedidoAberto]);
   useFocusEffect(useCallback(() => {
     void carregar();
     const intervalo = setInterval(() => {
-      if (pedidoAberto === null || AppState.currentState !== 'active') return;
-      void atualizarAcompanhamento(pedidoAberto);
-    }, 15_000);
+      if (AppState.currentState !== 'active') return;
+      void atualizarAcompanhamento(pedidoAberto ?? undefined);
+    }, pedidoAberto === null ? 60_000 : 15_000);
     const appStateSubscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && pedidoAberto !== null) {
-        void atualizarAcompanhamento(pedidoAberto);
+      if (state === 'active') {
+        void atualizarAcompanhamento(pedidoAberto ?? undefined);
       }
     });
     const networkSubscription = Network.addNetworkStateListener((state) => {
-      if (state.isConnected && state.isInternetReachable !== false && pedidoAberto !== null) {
-        void atualizarAcompanhamento(pedidoAberto);
+      if (state.isConnected && state.isInternetReachable !== false) {
+        void atualizarAcompanhamento(pedidoAberto ?? undefined);
       }
     });
     return () => {
@@ -165,10 +251,5 @@ export default function MeusPedidosScreen() {
 }
 
 const styles = StyleSheet.create({ paymentHistory: { marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: '#E4E7EB' }, historyTitle: { fontSize: 14, fontWeight: fontWeights.bold, color: colors.brand, marginBottom: spacing.md }, historyItem: { flexDirection: 'row', marginBottom: 15 }, historyIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.warningSoft, alignItems: 'center', justifyContent: 'center', marginRight: 10 }, historyIconSuccess: { backgroundColor: colors.successSoft }, historyIconRejected: { backgroundColor: colors.dangerSoft }, historyTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, historyValue: { color: colors.brand, fontWeight: fontWeights.bold, fontSize: 14 }, historyStatus: { color: colors.warning, fontSize: 12, fontWeight: fontWeights.bold }, statusSuccess: { color: colors.success }, statusRejected: { color: colors.danger }, historyDetails: { color: colors.muted, fontSize: 12, marginTop: 3 }, historyReference: { color: colors.subtle, fontSize: 11, marginTop: 3 }, historyReason: { color: colors.danger, fontSize: 12, marginTop: spacing.xs },  container: { flex: 1, backgroundColor: colors.background }, content: { padding: spacing.xl, paddingBottom: 45 }, header: { marginBottom: spacing.xl }, title: { fontSize: 28, fontWeight: fontWeights.bold, color: colors.brand }, subtitle: { color: colors.muted, marginTop: 5 }, orderCard: { backgroundColor: '#FFF', borderRadius: radii.xl, padding: 17, marginBottom: 14 }, orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, orderNumber: { color: colors.brand, fontSize: 18, fontWeight: fontWeights.bold }, orderDate: { color: colors.subtle, fontSize: 12, marginTop: 3 }, statusBadge: { backgroundColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radii.pill, maxWidth: '52%' }, statusReceived: { backgroundColor: colors.infoSoft }, statusPreparing: { backgroundColor: colors.accentSoft }, statusPrinting: { backgroundColor: colors.accentSoft }, statusDelivered: { backgroundColor: colors.successSoft }, statusReady: { backgroundColor: colors.warningSoft }, statusCancelled: { backgroundColor: colors.dangerSoft }, statusTextReceived: { color: colors.info }, statusTextPreparing: { color: colors.accent }, statusTextPrinting: { color: colors.accent }, statusTextDelivered: { color: colors.success }, statusTextReady: { color: colors.warning }, statusTextCancelled: { color: colors.danger }, statusText: { color: '#334E68', fontSize: 11, fontWeight: fontWeights.bold, textAlign: 'center' }, serviceArea: { flexDirection: 'row', alignItems: 'center', marginTop: 18 }, serviceIcon: { width: 45, height: 45, borderRadius: 13, backgroundColor: colors.brandSoft, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, serviceName: { color: colors.brand, fontWeight: fontWeights.bold, fontSize: 15 }, serviceInfo: { color: colors.subtle, fontSize: 13, marginTop: 3 }, totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 18, paddingTop: 15, borderTopWidth: 1, borderTopColor: colors.border }, totalLabel: { color: colors.muted }, totalValue: { color: colors.brand, fontSize: 20, fontWeight: fontWeights.bold }, trackButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 48, borderRadius: radii.md, backgroundColor: colors.brandSoft, marginTop: spacing.lg, gap: 7 }, trackButtonText: { color: colors.brand, fontWeight: fontWeights.bold, flex: 1, textAlign: 'center' }, trackingArea: { marginTop: 18 }, trackingTitle: { color: colors.brand, fontSize: 16, fontWeight: fontWeights.bold, marginBottom: 18 }, timeline: { paddingHorizontal: 5 }, timelineItem: { flexDirection: 'row', minHeight: 58 }, timelineLeft: { width: 35, alignItems: 'center' }, timelineCircle: { width: 25, height: 25, borderRadius: 13, borderWidth: 2, borderColor: colors.border, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center' }, timelineCircleDone: { backgroundColor: colors.success, borderColor: colors.success }, timelineCircleCurrent: { borderColor: colors.brand }, currentDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.brand }, timelineLine: { width: 2, flex: 1, backgroundColor: colors.border }, timelineLineDone: { backgroundColor: colors.success }, timelineContent: { flex: 1, paddingLeft: spacing.sm }, timelineTitle: { color: colors.subtle, fontSize: 14 }, timelineTitleActive: { color: colors.text, fontWeight: fontWeights.semibold }, timelineCurrentText: { color: colors.muted, fontSize: 11, marginTop: 3 }, readyMessage: { backgroundColor: colors.successSoft, borderRadius: radii.md, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 5 }, readyMessageText: { color: colors.success, flex: 1, fontWeight: fontWeights.semibold }, cancelledBox: { backgroundColor: colors.dangerSoft, padding: 14, borderRadius: radii.md, flexDirection: 'row', gap: 10 }, cancelledTitle: { color: colors.danger, fontWeight: fontWeights.bold }, cancelledDescription: { color: colors.danger, fontSize: 12, marginTop: 3 }, center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }, loadingText: { marginTop: 10, color: colors.muted }, empty: { alignItems: 'center', padding: 30 }, emptyTitle: { fontSize: 22, fontWeight: fontWeights.bold, color: colors.brand }, emptyText: { color: colors.subtle, marginTop: 5 }, payButton: { backgroundColor: colors.brand, minHeight: 46, borderRadius: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: spacing.md }, payButtonText: { color: '#FFF', fontWeight: fontWeights.bold }, modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }, paymentModal: { backgroundColor: '#FFF', padding: 22, borderTopLeftRadius: 22, borderTopRightRadius: 22 }, modalTitle: { color: colors.brand, fontSize: 23, fontWeight: fontWeights.bold }, modalSubtitle: { color: colors.muted, marginTop: spacing.xs, marginBottom: 18 }, modalLabel: { color: colors.text, fontWeight: fontWeights.semibold, marginTop: 10, marginBottom: 7 }, modalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 11, padding: 14 }, methods: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, method: { borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 10 }, methodSelected: { backgroundColor: colors.accentSoft, borderColor: colors.brand }, proofActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }, proofPreview: { width: 80, height: 80, borderRadius: 9, marginTop: 10 }, confirmButton: { backgroundColor: colors.brand, minHeight: 52, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginTop: 18 }, confirmText: { color: '#FFF', fontWeight: fontWeights.bold }, cancel: { textAlign: 'center', color: colors.muted, marginTop: 15 } });
-
-
-
-
-
 
 

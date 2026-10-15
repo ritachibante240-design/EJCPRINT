@@ -102,7 +102,7 @@ export class PaymentsService {
     }
   }
 
-  async createConfirmed(input: { externalReference: string; orderId: string; amountCents: number; method: string; type: string; reference?: string }) {
+  async createConfirmed(input: { externalReference: string; orderId: string; amountCents: number; method: string; type: string; reference?: string }, actor = 'Administrador') {
     const externalReference = input.externalReference.trim();
     if (!externalReference) throw new BadRequestException('Referência do pagamento inválida.');
 
@@ -132,13 +132,23 @@ export class PaymentsService {
       }
 
       if (existing) {
-        return transaction.payment.update({
+        const updated = await transaction.payment.update({
           where: { id: existing.id },
           data: { status: 'CONFIRMED', confirmedAt: new Date() },
         });
+        await transaction.adminAuditLog.create({
+          data: {
+            actor,
+            action: 'PAYMENT_CONFIRMED',
+            entityType: 'PAYMENT',
+            entityId: updated.id,
+            summary: `Pagamento ${updated.id} de ${updated.amountCents / 100} MT confirmado para o pedido ${order.number}.`,
+          },
+        });
+        return updated;
       }
 
-      return transaction.payment.create({
+      const payment = await transaction.payment.create({
         data: {
           externalReference,
           orderId: order.id,
@@ -150,6 +160,16 @@ export class PaymentsService {
           confirmedAt: new Date(),
         },
       });
+      await transaction.adminAuditLog.create({
+        data: {
+          actor,
+          action: 'PAYMENT_CONFIRMED',
+          entityType: 'PAYMENT',
+          entityId: payment.id,
+          summary: `Pagamento de ${payment.amountCents / 100} MT registado como confirmado para o pedido ${order.number}.`,
+        },
+      });
+      return payment;
     });
   }
 
@@ -221,7 +241,7 @@ export class PaymentsService {
     return target.includes('proofSha256');
   }
 
-  async approve(id: string) {
+  async approve(id: string, actor = 'Administrador') {
     return this.prisma.$transaction(async (transaction) => {
       const payment = await transaction.payment.findUnique({ where: { id }, include: { order: true } });
       if (!payment) throw new NotFoundException('Pagamento não encontrado.');
@@ -237,17 +257,39 @@ export class PaymentsService {
         throw new BadRequestException('A aprovação excederia o total do pedido.');
       }
 
-      return transaction.payment.update({ where: { id }, data: { status: 'CONFIRMED', confirmedAt: new Date() } });
+      const updated = await transaction.payment.update({ where: { id }, data: { status: 'CONFIRMED', confirmedAt: new Date() } });
+      await transaction.adminAuditLog.create({
+        data: {
+          actor,
+          action: 'PAYMENT_CONFIRMED',
+          entityType: 'PAYMENT',
+          entityId: updated.id,
+          summary: `Pagamento de ${updated.amountCents / 100} MT confirmado para o pedido ${payment.order.number}.`,
+        },
+      });
+      return updated;
     });
   }
 
-  async reject(id: string, reason: string) {
+  async reject(id: string, reason: string, actor = 'Administrador') {
     const motivo = reason.trim();
     if (!motivo) throw new BadRequestException('Informe o motivo.');
-    const payment = await this.prisma.payment.findUnique({ where: { id } });
-    if (!payment) throw new NotFoundException('Pagamento não encontrado.');
-    if (payment.status === 'REJECTED') return payment;
-    if (payment.status !== 'PENDING') throw new BadRequestException('Um pagamento confirmado não pode ser reprovado.');
-    return this.prisma.payment.update({ where: { id }, data: { status: 'REJECTED', rejectionReason: motivo } });
+    return this.prisma.$transaction(async (transaction) => {
+      const payment = await transaction.payment.findUnique({ where: { id }, include: { order: true } });
+      if (!payment) throw new NotFoundException('Pagamento não encontrado.');
+      if (payment.status === 'REJECTED') return payment;
+      if (payment.status !== 'PENDING') throw new BadRequestException('Um pagamento confirmado não pode ser reprovado.');
+      const updated = await transaction.payment.update({ where: { id }, data: { status: 'REJECTED', rejectionReason: motivo } });
+      await transaction.adminAuditLog.create({
+        data: {
+          actor,
+          action: 'PAYMENT_REJECTED',
+          entityType: 'PAYMENT',
+          entityId: updated.id,
+          summary: `Pagamento de ${updated.amountCents / 100} MT rejeitado para o pedido ${payment.order.number}. Motivo: ${motivo}`,
+        },
+      });
+      return updated;
+    });
   }
 }

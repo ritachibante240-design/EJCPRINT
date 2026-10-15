@@ -119,6 +119,18 @@ As operações de consulta e decisão — `GET /api/payments/:id`,
 `PATCH /api/payments/:id/reject` — exigem um token obtido em
 `POST /api/auth/admin/login`, enviado como `Authorization: Bearer <token>`.
 
+O histórico de alterações administrativas pode ser consultado em
+`GET /api/inventory/audit?skip=0&take=100` com o mesmo token. A tabela de
+auditoria é criada pela migration `20261015130000_add_admin_audit_log`; aplique
+a migration correspondente ao banco usado pelo backend antes de publicar a
+versão que expõe esta tela. A API limita cada página a 100 registos.
+
+O custo da tinta usado em cada nova impressão é guardado no movimento de stock.
+Antes de publicar a versão que permite editar o custo unitário dos materiais,
+aplique também a migration `20261015150000_add_ink_unit_cost_to_stock_movement`
+correspondente à base SQLite ou MySQL. Assim, as alterações de custo não
+modificam os custos estimados que já ficaram guardados nas impressões anteriores.
+
 Pagamentos locais pendentes, sem comprovativo disponível e ainda sem registo no
 servidor, são marcados localmente como rejeitados com a indicação de que o
 comprovativo deve ser enviado novamente. Isso não confirma nem contabiliza o

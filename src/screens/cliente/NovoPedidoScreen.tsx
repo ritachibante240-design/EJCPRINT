@@ -419,6 +419,10 @@ export default function NovoPedidoScreen({ navigation }: any) {
               </Pressable>
             )}
             <Text style={styles.label}>Quantas páginas tem o documento?</Text>
+            <Text style={styles.helperText}>
+              {servicoSelecionado?.preco} MT por página. O total do serviço considera páginas × cópias;
+              frente e verso reduz as folhas, não as páginas cobradas.
+            </Text>
             <TextInput
               style={styles.input}
               keyboardType="number-pad"
@@ -565,9 +569,16 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 </>
               )}
               <Text style={styles.summaryLine}>Cópias: {numeroCopias}</Text>
-              <Text style={styles.summaryLine}>
-                Impressão: {frenteVerso ? "Frente e verso" : "Frente única"}
-              </Text>
+              {!ehDigitalizacao && (
+                <Text style={styles.summaryLine}>
+                  Impressão: {frenteVerso ? "Frente e verso" : "Frente única"}
+                </Text>
+              )}
+              {calculo && servicoSelecionado && (
+                <Text style={styles.summaryLine}>
+                  Serviço: {servicoSelecionado.preco} MT × {calculo.totalPaginasImpressas} páginas
+                </Text>
+              )}
               {tipoEncadernacao !== "SEM_ENCADERNACAO" && calculo && (
                 <Text style={styles.summaryLine}>
                   Encadernação: {calculo.folhasPorCopia} folhas por exemplar ×{" "}

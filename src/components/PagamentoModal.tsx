@@ -5,6 +5,8 @@ import React, { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { enviarPagamento, MetodoPagamento, TipoPagamento } from '../services/pagamentoService';
 import ActionButton from './ActionButton';
 
@@ -36,12 +38,29 @@ export default function PagamentoModal({ visible, pedidoId, numeroPedido, client
   const [nome, setNome] = useState<string | null>(null);
   const [ehPdf, setEhPdf] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [numeroCopiado, setNumeroCopiado] = useState(false);
   const numeroPagamento = numerosPagamento[metodo];
   const valor = tipo === 'SINAL'
     ? Math.round((totalSeguro + Number.EPSILON) * 50) / 100
     : tipo === 'TOTAL'
       ? totalSeguro
       : Number(valorInicial ?? valorProp ?? 0);
+  function fechar() {
+    setNumeroCopiado(false);
+    onClose();
+  }
+  async function copiarNumeroPagamento() {
+    if (!numeroPagamento) return;
+    try {
+      await Clipboard.setStringAsync(numeroPagamento);
+      setNumeroCopiado(true);
+    } catch (erro) {
+      showAppAlert(
+        'Não foi possível copiar',
+        erro instanceof Error ? erro.message : 'Copie o número manualmente.',
+      );
+    }
+  }
   async function escolher(camera: boolean) {
     const permissao = camera ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissao.granted) return showAppAlert('Permissão necessária', 'Permita o acesso às imagens.');
@@ -75,14 +94,36 @@ export default function PagamentoModal({ visible, pedidoId, numeroPedido, client
   }
   async function confirmarEnvio() {
     if (!uri) return showAppAlert('Comprovativo necessário', 'Anexe o comprovativo antes de enviar.');
-    try { setEnviando(true); await enviarPagamento(pedidoId, valor, metodo, tipo, undefined, nome ?? undefined, uri ?? undefined); showAppAlert('Pagamento enviado', 'A EJC Print irá analisar o comprovativo.'); setUri(null); setNome(null); setEhPdf(false); onEnviado(); onClose(); } catch (erro) { const mensagem = erro instanceof Error ? erro.message : 'Erro ao enviar pagamento.'; if (/comprovativo já foi enviado/i.test(mensagem)) { showAppAlert('Comprovativo repetido', 'Este comprovativo já foi utilizado noutro pagamento. Anexe um ficheiro diferente.', [{ text: 'Entendi' }]); } else { showAppAlert('Não foi possível enviar', mensagem); } } finally { setEnviando(false); }
+    try {
+      setEnviando(true);
+      await enviarPagamento(pedidoId, valor, metodo, tipo, undefined, nome ?? undefined, uri ?? undefined);
+      showAppAlert('Pagamento enviado', 'A EJC Print irá analisar o comprovativo.');
+      setUri(null);
+      setNome(null);
+      setEhPdf(false);
+      onEnviado();
+      fechar();
+    } catch (erro) {
+      const mensagem = erro instanceof Error ? erro.message : 'Erro ao enviar pagamento.';
+      if (/comprovativo já foi enviado/i.test(mensagem)) {
+        showAppAlert(
+          'Comprovativo repetido',
+          'Este comprovativo já foi utilizado noutro pagamento. Anexe um ficheiro diferente.',
+          [{ text: 'Entendi' }],
+        );
+      } else {
+        showAppAlert('Não foi possível enviar', mensagem);
+      }
+    } finally {
+      setEnviando(false);
+    }
   }
   return visible ? (
     <Modal
       visible
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={fechar}
     >
       <View style={styles.overlay}>
         <ScrollView contentContainerStyle={styles.content}>
@@ -121,7 +162,10 @@ export default function PagamentoModal({ visible, pedidoId, numeroPedido, client
               <Pressable
                 key={m}
                 style={[styles.method, metodo === m && styles.selected]}
-                onPress={() => setMetodo(m)}
+                onPress={() => {
+                  setMetodo(m);
+                  setNumeroCopiado(false);
+                }}
               >
                 <Text>{m}</Text>
               </Pressable>
@@ -133,6 +177,24 @@ export default function PagamentoModal({ visible, pedidoId, numeroPedido, client
                 Número para {metodo}
               </Text>
               <Text style={styles.paymentNumberValue}>{numeroPagamento}</Text>
+              <Pressable
+                style={styles.copyNumberButton}
+                onPress={() => void copiarNumeroPagamento()}
+                accessibilityRole="button"
+                accessibilityLabel={`Copiar número ${numeroPagamento} para ${metodo}`}
+              >
+                <Ionicons
+                  name={numeroCopiado ? 'checkmark-circle-outline' : 'copy-outline'}
+                  size={18}
+                  color={colors.brand}
+                />
+                <Text style={styles.copyNumberText}>
+                  {numeroCopiado ? 'Número copiado' : 'Copiar número'}
+                </Text>
+              </Pressable>
+              <Text style={styles.paymentInstructions}>
+                Faça o pagamento para este número e anexe o comprovativo.
+              </Text>
             </View>
           )}
           <Text style={styles.label}>Comprovativo</Text>
@@ -160,12 +222,31 @@ export default function PagamentoModal({ visible, pedidoId, numeroPedido, client
             ) : (
               <Image source={{ uri }} style={styles.preview} />
             ))}
+          {uri && (
+            <View style={styles.attachmentRow}>
+              <Ionicons name="attach-outline" size={18} color={colors.brand} />
+              <Text style={styles.attachmentName} numberOfLines={2}>
+                {nome ?? 'Comprovativo selecionado'}
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setUri(null);
+                  setNome(null);
+                  setEhPdf(false);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Remover comprovativo selecionado"
+              >
+                <Text style={styles.removeAttachment}>Remover</Text>
+              </Pressable>
+            </View>
+          )}
           <ActionButton
             title={`Enviar comprovativo • ${formatarDinheiro(valor)}`}
             loading={enviando}
             onPress={confirmarEnvio}
           />
-          <Pressable onPress={onClose}>
+          <Pressable onPress={fechar}>
             <Text style={styles.cancel}>Cancelar</Text>
           </Pressable>
         </ScrollView>
@@ -224,6 +305,19 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.bold,
     marginTop: 3,
   },
+  copyNumberButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 10,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
+  },
+  copyNumberText: { color: colors.brand, fontWeight: fontWeights.semibold, fontSize: 13 },
+  paymentInstructions: { color: colors.muted, fontSize: 12, marginTop: 9 },
   amount: {
     color: colors.brand,
     fontSize: 21,
@@ -250,6 +344,17 @@ const styles = StyleSheet.create({
   },
   pdfName: { color: colors.text, fontWeight: fontWeights.semibold },
   preview: { width: "100%", height: 150, borderRadius: radii.md, marginTop: 10 },
+  attachmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    padding: 10,
+    backgroundColor: colors.brandSoft,
+    borderRadius: radii.sm,
+  },
+  attachmentName: { color: colors.text, flex: 1, fontSize: 12 },
+  removeAttachment: { color: colors.danger, fontWeight: fontWeights.semibold, fontSize: 12 },
   send: {
     backgroundColor: colors.brand,
     minHeight: 52,
@@ -261,4 +366,3 @@ const styles = StyleSheet.create({
   sendText: { color: "#FFF", fontWeight: fontWeights.bold },
   cancel: { textAlign: "center", color: colors.muted, marginTop: 14 },
 });
-

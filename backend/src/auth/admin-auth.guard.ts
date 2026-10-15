@@ -2,6 +2,8 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Request } from 'express';
 import { AuthService } from './auth.service';
 
+export type AdminAuthenticatedRequest = Request & { adminActor?: string };
+
 @Injectable()
 export class AdminAuthGuard implements CanActivate {
   constructor(private readonly auth: AuthService) {}
@@ -12,7 +14,8 @@ export class AdminAuthGuard implements CanActivate {
     if (!authorization?.startsWith('Bearer ')) {
       throw new UnauthorizedException('Autenticação de administrador obrigatória.');
     }
-    this.auth.verifyAdminToken(authorization.slice('Bearer '.length));
+    const session = this.auth.verifyAdminToken(authorization.slice('Bearer '.length));
+    (request as AdminAuthenticatedRequest).adminActor = session.sub;
     return true;
   }
 }

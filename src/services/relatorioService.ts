@@ -30,7 +30,19 @@ async function fetchRemoto<T>(path: string): Promise<T | null> {
 }
 
 export type PeriodoRelatorio = 'HOJE' | 'MES' | 'GERAL';
-export type ResumoRelatorio = { valorPedidos: number; recebido: number; porReceber: number; saidas: number; saldoMovimentos: number; totalPedidos: number; entregues: number; cancelados: number };
+export type ResumoRelatorio = {
+  valorPedidos: number;
+  recebido: number;
+  porReceber: number;
+  saidas: number;
+  saldoMovimentos: number;
+  custosDiretos: number;
+  despesasOperacionais: number;
+  lucroOperacionalEstimado: number;
+  totalPedidos: number;
+  entregues: number;
+  cancelados: number;
+};
 
 function inicioPeriodo(periodo: PeriodoRelatorio) {
   if (periodo === 'GERAL') return null;
@@ -39,14 +51,36 @@ function inicioPeriodo(periodo: PeriodoRelatorio) {
 }
 
 export async function obterResumoRelatorio(periodo: PeriodoRelatorio): Promise<ResumoRelatorio> {
-  const resumoRemoto = await fetchRemoto<{ valorPedidosCents: number; recebidoCents: number; porReceberCents: number; saidasCents: number; saldoMovimentosCents: number; totalPedidos: number; entregues: number; cancelados: number }>(`/inventory/reports?period=${periodo}`);
+  const resumoRemoto = await fetchRemoto<{
+    valorPedidosCents: number;
+    recebidoCents: number;
+    porReceberCents: number;
+    saidasCents: number;
+    saldoMovimentosCents: number;
+    custosDiretosCents: number;
+    despesasOperacionaisCents: number;
+    lucroOperacionalEstimadoCents: number;
+    totalPedidos: number;
+    entregues: number;
+    cancelados: number;
+  }>(`/inventory/reports?period=${periodo}`);
   if (resumoRemoto) {
+    if (
+      !Number.isFinite(resumoRemoto.custosDiretosCents) ||
+      !Number.isFinite(resumoRemoto.despesasOperacionaisCents) ||
+      !Number.isFinite(resumoRemoto.lucroOperacionalEstimadoCents)
+    ) {
+      throw new Error('Atualize o backend para consultar o lucro operacional estimado.');
+    }
     return {
       valorPedidos: resumoRemoto.valorPedidosCents / 100,
       recebido: resumoRemoto.recebidoCents / 100,
       porReceber: resumoRemoto.porReceberCents / 100,
       saidas: resumoRemoto.saidasCents / 100,
       saldoMovimentos: resumoRemoto.saldoMovimentosCents / 100,
+      custosDiretos: resumoRemoto.custosDiretosCents / 100,
+      despesasOperacionais: resumoRemoto.despesasOperacionaisCents / 100,
+      lucroOperacionalEstimado: resumoRemoto.lucroOperacionalEstimadoCents / 100,
       totalPedidos: resumoRemoto.totalPedidos,
       entregues: resumoRemoto.entregues,
       cancelados: resumoRemoto.cancelados,
@@ -55,8 +89,23 @@ export async function obterResumoRelatorio(periodo: PeriodoRelatorio): Promise<R
 
   const inicio = inicioPeriodo(periodo);
   const filtro = inicio ? ' AND data_criacao >= ?' : '';
-  const pedidos = await db.getFirstAsync<any>(`SELECT COALESCE(SUM(CASE WHEN estado != 'Cancelado' THEN total ELSE 0 END),0) AS valorPedidos, COALESCE(SUM(CASE WHEN estado != 'Cancelado' THEN valor_pago ELSE 0 END),0) AS recebido, COALESCE(SUM(CASE WHEN estado != 'Cancelado' AND total > valor_pago THEN total - valor_pago ELSE 0 END),0) AS porReceber, COUNT(*) AS totalPedidos, COALESCE(SUM(CASE WHEN estado = 'Entregue' THEN 1 ELSE 0 END),0) AS entregues, COALESCE(SUM(CASE WHEN estado = 'Cancelado' THEN 1 ELSE 0 END),0) AS cancelados FROM pedidos WHERE 1=1${filtro}`, ...(inicio ? [inicio] : []));
-  const despesas = await db.getFirstAsync<{ total: number }>(`SELECT COALESCE(SUM(valor),0) AS total FROM despesas ${inicio ? 'WHERE data_criacao >= ?' : ''}`, ...(inicio ? [inicio] : []));
-  const recebido = pedidos?.recebido ?? 0; const saidas = despesas?.total ?? 0;
-  return { valorPedidos: pedidos?.valorPedidos ?? 0, recebido, porReceber: pedidos?.porReceber ?? 0, saidas, saldoMovimentos: recebido - saidas, totalPedidos: pedidos?.totalPedidos ?? 0, entregues: pedidos?.entregues ?? 0, cancelados: pedidos?.cancelados ?? 0 };
+  const pedidos = await db.getFirstAsync<any>(`SELECT COALESCE(SUM(CASE WHEN estado != 'Cancelado' THEN total ELSE 0 END),0) AS valorPedidos, COALESCE(SUM(CASE WHEN estado != 'Cancelado' THEN valor_pago ELSE 0 END),0) AS recebido, COALESCE(SUM(CASE WHEN estado != 'Cancelado' AND total > valor_pago THEN total - valor_pago ELSE 0 END),0) AS porReceber, COALESCE(SUM(CASE WHEN estado != 'Cancelado' THEN custo_papel + custo_tinta ELSE 0 END),0) AS custosDiretos, COUNT(*) AS totalPedidos, COALESCE(SUM(CASE WHEN estado = 'Entregue' THEN 1 ELSE 0 END),0) AS entregues, COALESCE(SUM(CASE WHEN estado = 'Cancelado' THEN 1 ELSE 0 END),0) AS cancelados FROM pedidos WHERE 1=1${filtro}`, ...(inicio ? [inicio] : []));
+  const despesas = await db.getFirstAsync<{ total: number }>(`SELECT COALESCE(SUM(valor),0) AS total FROM despesas ${inicio ? "WHERE data_criacao >= ? AND tipo != 'COMPRA_STOCK'" : "WHERE tipo != 'COMPRA_STOCK'"}`, ...(inicio ? [inicio] : []));
+  const todasDespesas = await db.getFirstAsync<{ total: number }>(`SELECT COALESCE(SUM(valor),0) AS total FROM despesas ${inicio ? 'WHERE data_criacao >= ?' : ''}`, ...(inicio ? [inicio] : []));
+  const recebido = pedidos?.recebido ?? 0;
+  const custosDiretos = pedidos?.custosDiretos ?? 0;
+  const despesasOperacionais = despesas?.total ?? 0;
+  return {
+    valorPedidos: pedidos?.valorPedidos ?? 0,
+    recebido,
+    porReceber: pedidos?.porReceber ?? 0,
+    saidas: todasDespesas?.total ?? 0,
+    saldoMovimentos: recebido - (todasDespesas?.total ?? 0),
+    custosDiretos,
+    despesasOperacionais,
+    lucroOperacionalEstimado: (pedidos?.valorPedidos ?? 0) - custosDiretos - despesasOperacionais,
+    totalPedidos: pedidos?.totalPedidos ?? 0,
+    entregues: pedidos?.entregues ?? 0,
+    cancelados: pedidos?.cancelados ?? 0,
+  };
 }

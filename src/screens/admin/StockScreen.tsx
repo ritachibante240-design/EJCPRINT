@@ -26,7 +26,7 @@ import {
   listarStock,
   removerStock,
   registrarCompraStock,
-  definirCustoInicialStock,
+  definirCustoUnitarioStock,
   aplicarCustosPadraoImpressao,
   ajustarQuantidadeStock,
   registrarDesperdicio,
@@ -60,7 +60,7 @@ export default function StockScreen() {
 
   const [modalNovo, setModalNovo] = useState(false);
   const [modalCompra, setModalCompra] = useState(false);
-  const [modalCustoInicial, setModalCustoInicial] = useState(false);
+  const [modalCustoUnitario, setModalCustoUnitario] = useState(false);
   const [modalDesperdicio, setModalDesperdicio] = useState(false);
   const [modalAjuste, setModalAjuste] = useState(false);
   const [modalCalculadora, setModalCalculadora] = useState(false);
@@ -76,7 +76,7 @@ export default function StockScreen() {
   const [movimento, setMovimento] = useState('');
   const [valorCompra, setValorCompra] = useState('');
   const [quantidadeCompra, setQuantidadeCompra] = useState('');
-  const [valorCustoInicial, setValorCustoInicial] = useState('');
+  const [valorCustoUnitario, setValorCustoUnitario] = useState('');
   const [quantidadeDesperdicio, setQuantidadeDesperdicio] = useState('');
   const [motivoDesperdicio, setMotivoDesperdicio] = useState('');
   const [quantidadeReal, setQuantidadeReal] = useState('');
@@ -330,23 +330,52 @@ export default function StockScreen() {
     );
   }
 
-  async function confirmarCustoInicial() {
-    if (!itemSelecionado) return;
-    const valor = Number(valorCustoInicial.replace(',', '.'));
-    if (!Number.isFinite(valor) || valor <= 0) {
-      showAppAlert('Valor inválido', 'Informe o valor real do stock existente.');
+  async function confirmarCustoUnitario() {
+    if (processandoStock || !itemSelecionado) return;
+    const valor = Number(valorCustoUnitario.replace(',', '.'));
+    if (!Number.isFinite(valor) || valor < 0) {
+      showAppAlert('Valor inválido', 'Informe um custo unitário igual ou superior a zero.');
       return;
     }
     try {
-      await definirCustoInicialStock(itemSelecionado.id, valor);
-      setModalCustoInicial(false);
-      setValorCustoInicial('');
+      setProcessandoStock(true);
+      await definirCustoUnitarioStock(itemSelecionado.id, valor);
+      setModalCustoUnitario(false);
+      setValorCustoUnitario('');
       setItemSelecionado(null);
       await carregar();
-      showAppAlert('Custo definido', 'O custo médio foi inicializado sem alterar a quantidade nem o Caixa.');
+      showAppAlert(
+        'Custo atualizado',
+        'O novo custo será usado nos próximos cálculos. A quantidade, o Caixa e os custos guardados nas impressões anteriores não foram alterados.',
+      );
     } catch (erro) {
-      showAppAlert('Erro', erro instanceof Error ? erro.message : 'Não foi possível definir o custo inicial.');
+      showAppAlert('Erro', erro instanceof Error ? erro.message : 'Não foi possível atualizar o custo.');
+    } finally {
+      setProcessandoStock(false);
     }
+  }
+
+  function abrirEdicaoCusto(item: ItemStock) {
+    setItemSelecionado(item);
+    setValorCustoUnitario(item.custo_medio.toFixed(2));
+    setModalCustoUnitario(true);
+  }
+
+  function pedirConfirmacaoCustoUnitario() {
+    if (processandoStock || !itemSelecionado) return;
+    const novoCusto = Number(valorCustoUnitario.replace(',', '.'));
+    if (!Number.isFinite(novoCusto) || novoCusto < 0) {
+      showAppAlert('Valor inválido', 'Informe um custo unitário igual ou superior a zero.');
+      return;
+    }
+    showAppAlert(
+      'Confirmar alteração do custo',
+      `${itemSelecionado.nome}\n\nCusto atual: ${itemSelecionado.custo_medio.toFixed(2)} MT/${itemSelecionado.unidade}\nNovo custo: ${novoCusto.toFixed(2)} MT/${itemSelecionado.unidade}\n\nO novo custo será usado nos próximos cálculos de produção. Os custos de impressões anteriores serão mantidos.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Guardar', onPress: confirmarCustoUnitario },
+      ],
+    );
   }
 
   async function confirmarDesperdicio() {
@@ -439,6 +468,13 @@ export default function StockScreen() {
       showAppAlert('Quantidade inválida', 'Informe uma quantidade válida.');
       return;
     }
+    if (
+      itemSelecionado.unidade.trim().toLocaleLowerCase() === 'folhas' &&
+      !Number.isSafeInteger(quantidade)
+    ) {
+      showAppAlert('Quantidade inválida', 'A quantidade de folhas deve ser um número inteiro.');
+      return;
+    }
     showAppAlert(
       'Confirmar correção',
       `O stock de ${itemSelecionado.nome} será alterado de ${itemSelecionado.quantidade} para ${quantidade} ${itemSelecionado.unidade}.`,
@@ -447,6 +483,12 @@ export default function StockScreen() {
         { text: 'Confirmar', onPress: confirmarAjuste },
       ]
     );
+  }
+
+  function abrirEdicaoStock(item: ItemStock) {
+    setItemSelecionado(item);
+    setQuantidadeReal(String(item.quantidade));
+    setModalAjuste(true);
   }
 
   async function movimentar(
@@ -548,10 +590,59 @@ export default function StockScreen() {
         <View style={styles.divider} />
         <View style={styles.detailRow}><Text style={styles.detailLabel}>Repor quando chegar a</Text><Text style={styles.detailValue}>{item.stock_minimo} {item.unidade}</Text></View>
         <View style={styles.detailRow}><Text style={styles.detailLabel}>Custo médio</Text><Text style={styles.detailValue}>{item.custo_medio > 0 ? `${item.custo_medio.toFixed(4)} MT/${item.unidade}` : 'Ainda não definido'}</Text></View>
-        {item.custo_medio <= 0 && <Pressable style={styles.initialCostButton} onPress={() => { setItemSelecionado(item); setValorCustoInicial(''); setModalCustoInicial(true); }}><Ionicons name="calculator-outline" size={18} color={colors.brand} /><Text style={styles.initialCostText}>Definir custo inicial</Text></Pressable>}
+        <Pressable style={styles.initialCostButton} onPress={() => abrirEdicaoCusto(item)}>
+          <Ionicons name="create-outline" size={18} color={colors.brand} />
+          <Text style={styles.initialCostText}>Editar custo por {item.unidade}</Text>
+        </Pressable>
         <View style={styles.materialActions}>
-          <Pressable style={styles.buyButton} onPress={() => { setItemSelecionado(item); setQuantidadeCompra(''); setValorCompra(''); setModalCompra(true); }}><Ionicons name="cart-outline" size={19} color={colors.surface} /><Text style={styles.buyButtonText}>Comprar</Text></Pressable>
-          <Pressable style={styles.moreButton} onPress={() => { setItemSelecionado(item); showAppAlert(item.nome, 'Escolha uma opção', [{ text: 'Registar desperdício', onPress: () => { setQuantidadeDesperdicio(''); setMotivoDesperdicio(''); setModalDesperdicio(true); } }, { text: 'Corrigir quantidade', onPress: () => { setQuantidadeReal(String(item.quantidade)); setModalAjuste(true); } }, { text: 'Ver histórico', onPress: () => showAppAlert('Histórico', 'Os movimentos deste material são guardados automaticamente.') }, { text: 'Cancelar', style: 'cancel' }]); }}><Ionicons name="ellipsis-horizontal" size={20} color={colors.brand} /><Text style={styles.moreButtonText}>Mais</Text></Pressable>
+          <Pressable
+            style={styles.buyButton}
+            onPress={() => {
+              setItemSelecionado(item);
+              setQuantidadeCompra('');
+              setValorCompra('');
+              setModalCompra(true);
+            }}
+          >
+            <Ionicons name="cart-outline" size={19} color={colors.surface} />
+            <Text style={styles.buyButtonText}>Comprar</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={styles.editStockButton}
+            onPress={() => abrirEdicaoStock(item)}
+          >
+            <Ionicons name="create-outline" size={18} color={colors.brand} />
+            <Text style={styles.editStockText}>Editar stock</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Mais opções para ${item.nome}`}
+            style={styles.moreButton}
+            onPress={() => {
+              setItemSelecionado(item);
+              showAppAlert(item.nome, 'Escolha uma opção', [
+                {
+                  text: 'Registar desperdício',
+                  onPress: () => {
+                    setQuantidadeDesperdicio('');
+                    setMotivoDesperdicio('');
+                    setModalDesperdicio(true);
+                  },
+                },
+                {
+                  text: 'Ver histórico',
+                  onPress: () => showAppAlert(
+                    'Histórico',
+                    'Os movimentos deste material são guardados automaticamente.',
+                  ),
+                },
+                { text: 'Cancelar', style: 'cancel' },
+              ]);
+            }}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.brand} />
+          </Pressable>
         </View>
       </View>
     );
@@ -763,7 +854,7 @@ export default function StockScreen() {
       {/* MOVIMENTAÇÃO */}
 
       <Modal
-        visible={itemSelecionado !== null && !modalCompra && !modalCustoInicial && !modalDesperdicio && !modalAjuste}
+        visible={itemSelecionado !== null && !modalCompra && !modalCustoUnitario && !modalDesperdicio && !modalAjuste}
         transparent
         animationType="fade"
         onRequestClose={() =>
@@ -916,14 +1007,28 @@ export default function StockScreen() {
         </View>
       </Modal>
 
-      <Modal visible={modalCustoInicial} transparent animationType="slide" onRequestClose={() => setModalCustoInicial(false)}>
+      <Modal visible={modalCustoUnitario} transparent animationType="slide" onRequestClose={() => setModalCustoUnitario(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}><View><Text style={styles.modalTitle}>Definir custo inicial</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome} · {itemSelecionado?.quantidade} {itemSelecionado?.unidade}</Text></View><Pressable onPress={() => setModalCustoInicial(false)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable></View>
-            <Text style={styles.inputLabel}>Valor total do stock existente</Text>
-            <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Ex.: 323,40 MT" value={valorCustoInicial} onChangeText={setValorCustoInicial} />
-            <Text style={styles.initialCostHint}>Este valor apenas define o custo médio. Não adiciona quantidade, despesa ou movimento no Caixa.</Text>
-            <Pressable style={styles.confirmButton} onPress={confirmarCustoInicial}><Ionicons name="checkmark-circle-outline" size={21} color={colors.surface} /><Text style={styles.confirmButtonText}>Guardar custo inicial</Text></Pressable>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Editar custo unitário</Text>
+                <Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setModalCustoUnitario(false)}>
+                <Ionicons name="close" size={28} color={colors.brand} />
+              </Pressable>
+            </View>
+            <Text style={styles.inputLabel}>Custo por {itemSelecionado?.unidade} (MT)</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="decimal-pad"
+              placeholder="Ex.: 0,70"
+              value={valorCustoUnitario}
+              onChangeText={setValorCustoUnitario}
+            />
+            <Text style={styles.initialCostHint}>Este custo será usado nos próximos cálculos. Não altera a quantidade, o Caixa nem os custos guardados nas impressões anteriores.</Text>
+            <ActionButton title="Guardar custo" loading={processandoStock} onPress={pedirConfirmacaoCustoUnitario} style={styles.confirmButton} />
           </View>
         </View>
       </Modal>
@@ -938,8 +1043,8 @@ export default function StockScreen() {
             <View style={styles.calculationBox}>
               <Text style={styles.calculationLabel}>Valores de referência</Text>
               <Text style={styles.calculatorDetail}>Papel A4: 0,70 MT por folha</Text>
-              <Text style={styles.calculatorDetail}>Tinta preta: 200 MT ÷ 4.500 páginas = {(200 / 4500).toFixed(4)} MT/página</Text>
-              <Text style={styles.calculatorDetail}>Tintas C/M/Y: 600 MT ÷ 7.500 páginas = {(600 / 7500).toFixed(4)} MT/página</Text>
+              <Text style={styles.calculatorDetail}>Tinta preta: custo do frasco ÷ 4.500 páginas (referência: 200 MT)</Text>
+              <Text style={styles.calculatorDetail}>Impressão a cores: 3 frascos ÷ 7.500 páginas (referência: 600 MT)</Text>
               <Text style={styles.calculatorDetail}>Reserva para desperdício e limpeza: 10%</Text>
             </View>
             <View style={styles.calculationBox}>
@@ -947,7 +1052,7 @@ export default function StockScreen() {
               <Text style={styles.calculationValue}>Preto e branco: {((0.7 + 200 / 4500) * 1.1).toFixed(3)} MT</Text>
               <Text style={styles.calculationValue}>A cores: {((0.7 + 600 / 7500) * 1.1).toFixed(3)} MT</Text>
             </View>
-            <Text style={styles.initialCostHint}>O servidor calcula o papel pelas folhas realmente usadas (incluindo frente e verso) e acrescenta a tinta e a reserva. Aplicar corrige o custo médio do stock, sem alterar os custos dos pedidos já impressos.</Text>
+            <Text style={styles.initialCostHint}>O servidor calcula o papel pelas folhas usadas e aplica o custo atual da tinta registado no stock. Aplicar os valores padrão repõe os custos de referência; as impressões anteriores mantêm os custos guardados.</Text>
             <ActionButton title="Aplicar custos para próximos pedidos" loading={processandoStock} onPress={pedirConfirmacaoAplicacaoCustos} style={styles.confirmButton} />
           </View>
         </View>
@@ -964,10 +1069,10 @@ export default function StockScreen() {
 
       <Modal visible={modalAjuste} transparent animationType="slide" onRequestClose={() => setModalAjuste(false)}>
         <View style={styles.modalOverlay}><View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Corrigir quantidade</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
-          <Text style={styles.inputLabel}>Quantidade física encontrada</Text><TextInput style={styles.input} keyboardType="decimal-pad" value={quantidadeReal} onChangeText={setQuantidadeReal} placeholder="Ex.: 957" />
+          <Text style={styles.modalTitle}>Editar stock</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
+          <Text style={styles.inputLabel}>Quantidade física atual ({itemSelecionado?.unidade})</Text><TextInput style={styles.input} keyboardType={itemSelecionado?.unidade.trim().toLocaleLowerCase() === 'folhas' ? 'number-pad' : 'decimal-pad'} value={quantidadeReal} onChangeText={setQuantidadeReal} placeholder="Informe a quantidade contada" />
           <Text style={styles.initialCostHint}>Este ajuste regista a diferença do inventário. Não será classificado automaticamente como desperdício.</Text>
-          <ActionButton title="Guardar correção" loading={processandoStock} onPress={pedirConfirmacaoAjuste} style={styles.confirmButton} />
+          <ActionButton title="Guardar stock atualizado" loading={processandoStock} onPress={pedirConfirmacaoAjuste} style={styles.confirmButton} />
         </View></View>
       </Modal>
     </>
@@ -1312,11 +1417,12 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 9 },
   detailLabel: { color: colors.subtle },
   detailValue: { color: '#334E68', fontWeight: fontWeights.semibold },
-  materialActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  materialActions: { flexDirection: 'row', gap: 8, marginTop: 14 },
   buyButton: { flex: 1, backgroundColor: colors.brand, minHeight: 48, borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7 },
   buyButtonText: { color: colors.surface, fontWeight: fontWeights.bold },
-  moreButton: { paddingHorizontal: spacing.xl, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5 },
-  moreButtonText: { color: colors.brand, fontWeight: fontWeights.bold },
+  editStockButton: { flex: 1, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5 },
+  editStockText: { color: colors.brand, fontSize: 12, fontWeight: fontWeights.bold },
+  moreButton: { width: 48, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(16,42,67,0.35)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.surface, padding: 22, paddingBottom: 35, borderTopLeftRadius: 25, borderTopRightRadius: 25 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 25 },

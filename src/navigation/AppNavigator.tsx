@@ -14,6 +14,7 @@ import VendasScreen from '../screens/admin/VendasScreen';
 import DespesasScreen from '../screens/admin/DespesasScreen';
 import StockScreen from '../screens/admin/StockScreen';
 import PagamentosPendentesScreen from '../screens/admin/PagamentosPendentesScreen';
+import HistoricoAdminScreen from '../screens/admin/HistoricoAdminScreen';
 import LoginAdministradorScreen from '../screens/admin/LoginAdministradorScreen';
 import RecuperarPasswordScreen from '../screens/admin/RecuperarPasswordScreen';
 import AcessoScreen from '../screens/AcessoScreen';
@@ -90,6 +91,7 @@ export default function AppNavigator() {
         />
         <Stack.Screen name="PagamentoCliente" component={PagamentoClienteScreen} options={{ title: 'Pagamento do pedido' }} />
         <Stack.Screen name="PagamentosPendentes" component={PagamentosPendentesScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="HistoricoAdmin" component={HistoricoAdminScreen} options={{ title: 'Histórico de alterações' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

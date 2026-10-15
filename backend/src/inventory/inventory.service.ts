@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
-import { AdjustStockDto, InitialStockCostDto, PurchaseStockDto, WasteStockDto } from './dto/stock-operation.dto';
+import { AdjustStockDto, InitialStockCostDto, PurchaseStockDto, SetStockUnitCostDto, WasteStockDto } from './dto/stock-operation.dto';
 
 const PAPER_SERVICES = new Set([
   'Impressão P/B',
@@ -27,13 +27,14 @@ function calculatePrintCosts(input: {
   copyCount: number;
   sheetsRequired: number;
   paperCostPerSheet: number;
+  inkBottleCost?: number;
 }) {
   const paperCost = input.sheetsRequired * input.paperCostPerSheet;
   const printedPages = input.pageCount * input.copyCount;
   const inkCostPerPage = input.service === 'Impressão P/B' || input.service === 'Fotocópia P/B'
-    ? PRINT_COST_DEFAULTS.blackInkBottleCost / PRINT_COST_DEFAULTS.blackInkYieldPages
+    ? (input.inkBottleCost ?? PRINT_COST_DEFAULTS.blackInkBottleCost) / PRINT_COST_DEFAULTS.blackInkYieldPages
     : input.service === 'Colorida simples' || input.service === 'Colorida com imagens'
-      ? PRINT_COST_DEFAULTS.colorInkSetCost / PRINT_COST_DEFAULTS.colorInkYieldPages
+      ? (input.inkBottleCost ?? PRINT_COST_DEFAULTS.blackInkBottleCost) * 3 / PRINT_COST_DEFAULTS.colorInkYieldPages
       : 0;
   const inkCost = printedPages * inkCostPerPage;
   const wasteReserve = (paperCost + inkCost) * PRINT_COST_DEFAULTS.wasteReserveRate;
@@ -50,11 +51,30 @@ function calculatePrintCosts(input: {
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private registarAuditoria(
+    transaction: Prisma.TransactionClient,
+    actor: string | undefined,
+    action: string,
+    entityType: string,
+    entityId: string,
+    summary: string,
+  ) {
+    return transaction.adminAuditLog.create({
+      data: {
+        actor: actor?.trim() || 'Administrador',
+        action,
+        entityType,
+        entityId,
+        summary,
+      },
+    });
+  }
+
   listItems() {
     return this.prisma.stockItem.findMany({ orderBy: { name: 'asc' } });
   }
 
-  async createItem(input: CreateStockItemDto) {
+  async createItem(input: CreateStockItemDto, actor?: string) {
     const name = input.name.trim();
     const normalizedName = name.toLowerCase();
     const category = input.category.trim();
@@ -104,6 +124,14 @@ export class InventoryService {
             reason: 'Cadastro inicial do material',
           },
         });
+        await this.registarAuditoria(
+          transaction,
+          actor,
+          'STOCK_ITEM_CREATED',
+          'STOCK',
+          item.id,
+          `Material ${item.name} cadastrado com ${item.quantity} ${item.unit}; mínimo ${item.minimumQuantity} ${item.unit}.`,
+        );
         return item;
       });
     } catch (error) {
@@ -113,7 +141,7 @@ export class InventoryService {
     }
   }
 
-  async purchase(stockItemId: string, input: PurchaseStockDto) {
+  async purchase(stockItemId: string, input: PurchaseStockDto, actor?: string) {
     const externalReference = input.externalReference.trim();
     if (!externalReference) throw new BadRequestException('Referência da operação inválida.');
     if (input.quantity <= 0 || !Number.isSafeInteger(input.amountCents)) {
@@ -161,11 +189,20 @@ export class InventoryService {
           stockMovementId: movement.id,
         },
       });
-      return transaction.stockItem.findUniqueOrThrow({ where: { id: item.id } });
+      const updatedItem = await transaction.stockItem.findUniqueOrThrow({ where: { id: item.id } });
+      await this.registarAuditoria(
+        transaction,
+        actor,
+        'STOCK_PURCHASE_RECORDED',
+        'STOCK',
+        item.id,
+        `Compra de ${input.quantity} ${item.unit} de ${item.name}, no valor de ${input.amountCents / 100} MT.`,
+      );
+      return updatedItem;
     });
   }
 
-  async adjust(stockItemId: string, input: AdjustStockDto) {
+  async adjust(stockItemId: string, input: AdjustStockDto, actor?: string) {
     const externalReference = input.externalReference.trim();
     if (!externalReference) throw new BadRequestException('Referência da operação inválida.');
     return this.prisma.$transaction(async (transaction) => {
@@ -209,11 +246,20 @@ export class InventoryService {
           reason: input.reason?.trim() || 'Ajuste de inventário',
         },
       });
-      return transaction.stockItem.update({ where: { id: item.id }, data: { quantity: nextQuantity } });
+      const updatedItem = await transaction.stockItem.update({ where: { id: item.id }, data: { quantity: nextQuantity } });
+      await this.registarAuditoria(
+        transaction,
+        actor,
+        'STOCK_ADJUSTED',
+        'STOCK',
+        item.id,
+        `${item.name}: quantidade alterada de ${item.quantity} para ${nextQuantity} ${item.unit}. Motivo: ${input.reason?.trim() || 'Ajuste de inventário'}.`,
+      );
+      return updatedItem;
     });
   }
 
-  async setInitialCost(stockItemId: string, input: InitialStockCostDto) {
+  async setInitialCost(stockItemId: string, input: InitialStockCostDto, actor?: string) {
     const externalReference = input.externalReference.trim();
     if (!externalReference || !Number.isSafeInteger(input.amountCents)) {
       throw new BadRequestException('O valor do custo inicial é inválido.');
@@ -242,11 +288,62 @@ export class InventoryService {
           reason: 'Definição do custo inicial do stock',
         },
       });
-      return transaction.stockItem.update({ where: { id: item.id }, data: { averageUnitCost } });
+      const updatedItem = await transaction.stockItem.update({ where: { id: item.id }, data: { averageUnitCost } });
+      await this.registarAuditoria(
+        transaction,
+        actor,
+        'STOCK_INITIAL_COST_SET',
+        'STOCK',
+        item.id,
+        `Custo médio inicial de ${item.name} definido para ${averageUnitCost.toFixed(4)} MT/${item.unit}.`,
+      );
+      return updatedItem;
     });
   }
 
-  async applyPrintCostDefaults(externalReference: string) {
+  async setUnitCost(stockItemId: string, input: SetStockUnitCostDto, actor?: string) {
+    const externalReference = input.externalReference.trim();
+    if (!externalReference || !Number.isSafeInteger(input.unitCostCents)) {
+      throw new BadRequestException('O custo unitário informado é inválido.');
+    }
+    return this.prisma.$transaction(async (transaction) => {
+      const previous = await transaction.stockMovement.findUnique({
+        where: { externalReference },
+        include: { stockItem: true },
+      });
+      if (previous) return previous.stockItem;
+
+      const item = await transaction.stockItem.findUnique({ where: { id: stockItemId } });
+      if (!item) throw new NotFoundException('Material não encontrado.');
+      const nextUnitCost = input.unitCostCents / 100;
+
+      await transaction.stockMovement.create({
+        data: {
+          externalReference,
+          stockItemId: item.id,
+          type: 'CORRECAO_CUSTO',
+          quantity: 0,
+          unitCost: nextUnitCost,
+          reason: `Custo unitário alterado de ${item.averageUnitCost.toFixed(2)} para ${nextUnitCost.toFixed(2)} MT/${item.unit}.`,
+        },
+      });
+      const updatedItem = await transaction.stockItem.update({
+        where: { id: item.id },
+        data: { averageUnitCost: nextUnitCost },
+      });
+      await this.registarAuditoria(
+        transaction,
+        actor,
+        'STOCK_UNIT_COST_UPDATED',
+        'STOCK',
+        item.id,
+        `Custo unitário de ${item.name} alterado de ${item.averageUnitCost.toFixed(2)} para ${nextUnitCost.toFixed(2)} MT/${item.unit}.`,
+      );
+      return updatedItem;
+    });
+  }
+
+  async applyPrintCostDefaults(externalReference: string, actor?: string) {
     const reference = externalReference.trim();
     if (!reference) throw new BadRequestException('Referência da operação inválida.');
 
@@ -255,7 +352,7 @@ export class InventoryService {
         where: { normalizedName: { in: ['papel a4', 'a4'] } },
       });
       const ink = await transaction.stockItem.findFirst({
-        where: { normalizedName: 'tinta-epson l3252' },
+        where: { normalizedName: { in: ['tinta-epson l3252', 'tinta epson l3252'] } },
       });
       if (!paper) throw new NotFoundException('Material Papel A4 não está cadastrado no stock.');
       if (!ink) throw new NotFoundException('Material Tinta Epson L3252 não está cadastrado no stock.');
@@ -274,6 +371,7 @@ export class InventoryService {
         { item: ink, newUnitCost: PRINT_COST_DEFAULTS.blackInkBottleCost, key: 'ink' },
       ];
       const result = [];
+      let appliedNewDefaults = false;
       for (const { item, newUnitCost, key } of materials) {
         const movementReference = `${reference}:${key}`;
         const previous = await transaction.stockMovement.findUnique({
@@ -296,6 +394,7 @@ export class InventoryService {
             reason: `Atualização do custo de referência para trabalhos futuros (${item.averageUnitCost.toFixed(4)} → ${newUnitCost.toFixed(4)} MT/${item.unit})`,
           },
         });
+        appliedNewDefaults = true;
         result.push(await transaction.stockItem.update({
           where: { id: item.id },
           data: {
@@ -304,11 +403,21 @@ export class InventoryService {
           },
         }));
       }
+      if (appliedNewDefaults) {
+        await this.registarAuditoria(
+          transaction,
+          actor,
+          'PRINT_COST_DEFAULTS_APPLIED',
+          'STOCK',
+          reference,
+          'Custos padrão de impressão aplicados ao Papel A4 e à tinta Epson L3252 para novas produções.',
+        );
+      }
       return result;
     });
   }
 
-  async waste(stockItemId: string, input: WasteStockDto) {
+  async waste(stockItemId: string, input: WasteStockDto, actor?: string) {
     const externalReference = input.externalReference.trim();
     const reason = input.reason?.trim() ?? '';
     if (!externalReference) throw new BadRequestException('Referência da operação inválida.');
@@ -343,10 +452,19 @@ export class InventoryService {
           reason,
         },
       });
-      return transaction.stockItem.update({
+      const updatedItem = await transaction.stockItem.update({
         where: { id: item.id },
         data: { quantity: item.quantity - input.quantity },
       });
+      await this.registarAuditoria(
+        transaction,
+        actor,
+        'STOCK_WASTE_RECORDED',
+        'STOCK',
+        item.id,
+        `Desperdício de ${input.quantity} ${item.unit} de ${item.name}. Motivo: ${reason}.`,
+      );
+      return updatedItem;
     });
   }
 
@@ -361,24 +479,46 @@ export class InventoryService {
     return this.prisma.expense.findMany({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
   }
 
-  async createExpense(input: CreateExpenseDto) {
+  listAuditLogs(skip = 0, take = 100) {
+    if (!Number.isSafeInteger(skip) || skip < 0 || !Number.isSafeInteger(take) || take < 1 || take > 100) {
+      throw new BadRequestException('A paginação do histórico é inválida.');
+    }
+    return this.prisma.adminAuditLog.findMany({
+      skip,
+      take,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+  }
+
+  async createExpense(input: CreateExpenseDto, actor?: string) {
     const externalReference = input.externalReference.trim();
     const description = input.description.trim();
     const category = input.category.trim();
     if (!externalReference || !description || !category || !Number.isSafeInteger(input.amountCents)) {
       throw new BadRequestException('Os dados da despesa são inválidos.');
     }
-    const previous = await this.prisma.expense.findUnique({ where: { externalReference } });
-    if (previous) return previous;
     try {
-      return await this.prisma.expense.create({
-        data: {
-          externalReference,
-          description,
-          category,
-          type: input.type,
-          amountCents: input.amountCents,
-        },
+      return await this.prisma.$transaction(async (transaction) => {
+        const previous = await transaction.expense.findUnique({ where: { externalReference } });
+        if (previous) return previous;
+        const expense = await transaction.expense.create({
+          data: {
+            externalReference,
+            description,
+            category,
+            type: input.type,
+            amountCents: input.amountCents,
+          },
+        });
+        await this.registarAuditoria(
+          transaction,
+          actor,
+          'EXPENSE_RECORDED',
+          'EXPENSE',
+          expense.id,
+          `Despesa ${description} registada na categoria ${category}, no valor de ${input.amountCents / 100} MT.`,
+        );
+        return expense;
       });
     } catch (error) {
       if (!this.isUniqueViolation(error)) throw error;
@@ -470,14 +610,22 @@ export class InventoryService {
       this.prisma.order.findMany({
         where: dateFilter ? { createdAt: dateFilter } : {},
         select: {
+          service: true,
+          pageCount: true,
+          copyCount: true,
+          sheetsRequired: true,
           totalCents: true,
           status: true,
+          stockMovements: {
+            where: { type: 'CONSUMO_PEDIDO' },
+            select: { quantity: true, unitCost: true, inkUnitCost: true },
+          },
           payments: { where: { status: 'CONFIRMED', ...(dateFilter ? { confirmedAt: dateFilter } : {}) }, select: { amountCents: true } },
         },
       }),
       this.prisma.expense.findMany({
         where: dateFilter ? { createdAt: dateFilter } : {},
-        select: { amountCents: true },
+        select: { amountCents: true, type: true },
       }),
     ]);
     const valorPedidosCents = orders.reduce((sum, order) => sum + (order.status === 'CANCELLED' ? 0 : order.totalCents), 0);
@@ -487,6 +635,23 @@ export class InventoryService {
       return sum + (order.status === 'CANCELLED' ? 0 : Math.max(order.totalCents - received, 0));
     }, 0);
     const saidasCents = expenses.reduce((sum, expense) => sum + expense.amountCents, 0);
+    const custosDiretosCents = orders.reduce((sum, order) => {
+      if (order.status === 'CANCELLED') return sum;
+      const material = order.stockMovements[0];
+      if (!material || !PAPER_SERVICES.has(order.service)) return sum;
+      const costs = calculatePrintCosts({
+        service: order.service,
+        pageCount: order.pageCount,
+        copyCount: order.copyCount,
+        sheetsRequired: order.sheetsRequired,
+        paperCostPerSheet: material.unitCost ?? 0,
+        inkBottleCost: material.inkUnitCost ?? PRINT_COST_DEFAULTS.blackInkBottleCost,
+      });
+      return sum + Math.round(costs.total * 100);
+    }, 0);
+    const despesasOperacionaisCents = expenses
+      .filter((expense) => expense.type !== 'COMPRA_STOCK')
+      .reduce((sum, expense) => sum + expense.amountCents, 0);
     return {
       valorPedidosCents,
       valorTotalInclCancelledCents: orders.reduce((sum, order) => sum + order.totalCents, 0),
@@ -494,6 +659,9 @@ export class InventoryService {
       porReceberCents,
       saidasCents,
       saldoMovimentosCents: recebidoCents - saidasCents,
+      custosDiretosCents,
+      despesasOperacionaisCents,
+      lucroOperacionalEstimadoCents: valorPedidosCents - custosDiretosCents - despesasOperacionaisCents,
       totalPedidos: orders.length,
       entregues: orders.filter((order) => order.status === 'DELIVERED').length,
       cancelados: orders.filter((order) => order.status === 'CANCELLED').length,
@@ -501,7 +669,7 @@ export class InventoryService {
     };
   }
 
-  async startPrint(orderId: string, externalReference: string) {
+  async startPrint(orderId: string, externalReference: string, actor?: string) {
     const reference = externalReference.trim();
     if (!reference) throw new BadRequestException('Referência da operação inválida.');
     return this.prisma.$transaction(async (transaction) => {
@@ -526,6 +694,7 @@ export class InventoryService {
             copyCount: order.copyCount,
             sheetsRequired: order.sheetsRequired,
             paperCostPerSheet: previous.unitCost ?? previous.stockItem.averageUnitCost,
+            inkBottleCost: previous.inkUnitCost ?? PRINT_COST_DEFAULTS.blackInkBottleCost,
           }),
         };
       }
@@ -541,6 +710,14 @@ export class InventoryService {
 
       if (!PAPER_SERVICES.has(order.service)) {
         const updatedOrder = await transaction.order.update({ where: { id: orderId }, data: { status: 'PRINTING' } });
+        await this.registarAuditoria(
+          transaction,
+          actor,
+          'ORDER_PRINTING_STARTED',
+          'ORDER',
+          order.id,
+          `Pedido ${order.number}: ${order.status} → PRINTING.`,
+        );
         return {
           order: updatedOrder,
           stockItem: null,
@@ -557,6 +734,9 @@ export class InventoryService {
 
       const paper = await transaction.stockItem.findUnique({ where: { normalizedName: 'papel a4' } })
         ?? await transaction.stockItem.findUnique({ where: { normalizedName: 'a4' } });
+      const ink = await transaction.stockItem.findFirst({
+        where: { normalizedName: { in: ['tinta-epson l3252', 'tinta epson l3252'] } },
+      });
       if (!paper) throw new BadRequestException('Papel A4 não está cadastrado no stock.');
       if (!Number.isInteger(order.sheetsRequired) || order.sheetsRequired <= 0) {
         throw new BadRequestException('Este pedido não possui um cálculo válido de folhas.');
@@ -573,6 +753,7 @@ export class InventoryService {
           type: 'CONSUMO_PEDIDO',
           quantity: order.sheetsRequired,
           unitCost: paper.averageUnitCost,
+          inkUnitCost: ink?.averageUnitCost ?? PRINT_COST_DEFAULTS.blackInkBottleCost,
           reason: `Impressão do pedido ${order.number}`,
         },
       });
@@ -581,17 +762,27 @@ export class InventoryService {
         data: { quantity: { decrement: order.sheetsRequired } },
       });
       const updatedOrder = await transaction.order.update({ where: { id: orderId }, data: { status: 'PRINTING' } });
+      const costs = calculatePrintCosts({
+        service: order.service,
+        pageCount: order.pageCount,
+        copyCount: order.copyCount,
+        sheetsRequired: order.sheetsRequired,
+        paperCostPerSheet: paper.averageUnitCost,
+        inkBottleCost: ink?.averageUnitCost ?? PRINT_COST_DEFAULTS.blackInkBottleCost,
+      });
+      await this.registarAuditoria(
+        transaction,
+        actor,
+        'ORDER_PRINTING_STARTED',
+        'ORDER',
+        order.id,
+        `Pedido ${order.number}: ${order.status} → PRINTING; consumo ${order.sheetsRequired} folhas com custo direto estimado de ${costs.total.toFixed(2)} MT.`,
+      );
       return {
         order: updatedOrder,
         stockItem,
         movement,
-        costs: calculatePrintCosts({
-          service: order.service,
-          pageCount: order.pageCount,
-          copyCount: order.copyCount,
-          sheetsRequired: order.sheetsRequired,
-          paperCostPerSheet: paper.averageUnitCost,
-        }),
+        costs,
       };
     });
   }

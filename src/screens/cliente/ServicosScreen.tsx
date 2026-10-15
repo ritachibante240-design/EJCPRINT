@@ -34,6 +34,21 @@ export default function ServicosScreen({ navigation }: any) {
       <View style={styles.card}>
         <View style={styles.iconBox}><Ionicons name="scan-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Digitalização</Text><Text style={styles.price}>15 MT / página</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
       </View>
+
+      <View style={styles.priceGuide}>
+        <View style={styles.priceGuideHeading}>
+          <Ionicons name="information-circle-outline" size={22} color={colors.brand} />
+          <Text style={styles.priceGuideTitle}>Como é calculado o valor</Text>
+        </View>
+        <Text style={styles.priceGuideText}>
+          O serviço é cobrado por página: preço por página × páginas do documento × número de cópias.
+          Frente e verso reduz as folhas utilizadas, mas as páginas continuam a ser contabilizadas.
+        </Text>
+        <Text style={styles.priceGuideText}>
+          Encadernação é opcional e cobrada por exemplar: 30 MT de 1 a 50 folhas, 40 MT de 51 a 100 folhas
+          e 50 MT de 101 a 200 folhas. Acima de 200 folhas, solicite uma cotação.
+        </Text>
+      </View>
       </ScrollView>
       <View style={[styles.bottomBar, { height: 72 + insets.bottom, paddingBottom: 8 + insets.bottom }, isDesktop && { maxWidth: 680, width: '100%', alignSelf: 'center', borderRadius: radii.lg, marginBottom: 14, borderWidth: 1, borderColor: colors.border }]}><Pressable style={styles.bottomItem} onPress={() => navigation.navigate('Acesso')}><Ionicons name="home-outline" size={23} color={colors.subtle} /><Text style={styles.bottomText}>Início</Text></Pressable><Pressable style={styles.bottomItem} onPress={() => navigation.navigate('Servicos')}><Ionicons name="pricetag" size={23} color={colors.brand} /><Text style={styles.bottomActive}>Serviços</Text></Pressable><Pressable style={styles.bottomItem} onPress={() => navigation.navigate('MeusPedidos')}><Ionicons name="receipt-outline" size={23} color={colors.subtle} /><Text style={styles.bottomText}>Pedidos</Text></Pressable></View>
     </View>
@@ -58,6 +73,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   description: { color: colors.subtle, fontSize: 16, marginTop: 5, marginBottom: spacing.xl },
+  priceGuide: {
+    backgroundColor: colors.brandSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  priceGuideHeading: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm },
+  priceGuideTitle: { color: colors.brand, fontSize: 16, fontWeight: fontWeights.bold },
+  priceGuideText: { color: colors.text, fontSize: 13, lineHeight: 19, marginTop: spacing.xs },
 
   card: {
     backgroundColor: colors.surface,

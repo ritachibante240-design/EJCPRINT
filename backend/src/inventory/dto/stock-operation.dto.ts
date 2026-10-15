@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class StockOperationDto {
   @IsString()
@@ -36,6 +36,18 @@ export class InitialStockCostDto {
   @IsNumber({ allowInfinity: false, allowNaN: false })
   @Min(1)
   amountCents!: number;
+}
+
+export class SetStockUnitCostDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
+  externalReference!: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(2_147_483_647)
+  unitCostCents!: number;
 }
 
 export class StartPrintDto {
