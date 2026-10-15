@@ -1,4 +1,5 @@
 import { formatarDinheiro } from '../../utils/formatters';
+import { colors, fontWeights, radii, spacing } from '../../theme';
 import { showAppAlert } from '../../components/AppAlert';
 import React, { useCallback, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
@@ -400,52 +401,52 @@ export default function VendasScreen() {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#F5F7FA',
+		backgroundColor: colors.background,
 	},
 
 	content: {
-		padding: 20,
+		padding: spacing.xl,
 		paddingBottom: 40,
 	},
 
 	pageHeader: {
-		marginBottom: 20,
+		marginBottom: spacing.xl,
 	},
 
 	empty: {
 		alignItems: 'center',
-		paddingHorizontal: 20,
+		paddingHorizontal: spacing.xl,
 		paddingVertical: 48,
 	},
 
 	emptyTitle: {
-		color: '#102A43',
+		color: colors.brand,
 		fontSize: 16,
-		fontWeight: 'bold',
+		fontWeight: fontWeights.bold,
 		textAlign: 'center',
 	},
 
 	emptyText: {
-		color: '#829AB1',
-		marginTop: 8,
+		color: colors.subtle,
+		marginTop: spacing.sm,
 		textAlign: 'center',
 	},
 
 	title: {
 		fontSize: 28,
-		fontWeight: 'bold',
-		color: '#102A43',
+		fontWeight: fontWeights.bold,
+		color: colors.brand,
 	},
 
 	subtitle: {
-		color: '#829AB1',
-		marginTop: 4,
+		color: colors.subtle,
+		marginTop: spacing.xs,
 	},
 
 	card: {
-		backgroundColor: '#FFFFFF',
+		backgroundColor: colors.surface,
 		padding: 18,
-		borderRadius: 16,
+		borderRadius: radii.lg,
 		marginBottom: 14,
 	},
 
@@ -455,35 +456,35 @@ const styles = StyleSheet.create({
 	},
 
 	numero: {
-		color: '#102A43',
+		color: colors.brand,
 		fontSize: 18,
-		fontWeight: 'bold',
+		fontWeight: fontWeights.bold,
 	},
 
 	paymentStatus: {
-		color: '#C53030',
-		fontWeight: 'bold',
+		color: colors.danger,
+		fontWeight: fontWeights.bold,
 	},
 
 	paid: {
-		color: '#147D64',
+		color: colors.success,
 	},
 
 	cliente: {
 		fontSize: 16,
-		fontWeight: '600',
-		color: '#243B53',
+		fontWeight: fontWeights.semibold,
+		color: colors.text,
 		marginTop: 15,
 	},
 
 	servico: {
-		color: '#829AB1',
-		marginTop: 4,
+		color: colors.subtle,
+		marginTop: spacing.xs,
 	},
 
 	line: {
 		height: 1,
-		backgroundColor: '#E6EAF0',
+		backgroundColor: colors.border,
 		marginVertical: 15,
 	},
 
@@ -494,61 +495,61 @@ const styles = StyleSheet.create({
 	},
 
 	label: {
-		color: '#829AB1',
+		color: colors.subtle,
 	},
 
 	value: {
-		color: '#102A43',
-		fontWeight: 'bold',
+		color: colors.brand,
+		fontWeight: fontWeights.bold,
 	},
 
 	received: {
-		color: '#147D64',
-		fontWeight: 'bold',
+		color: colors.success,
+		fontWeight: fontWeights.bold,
 	},
 
 	missing: {
-		color: '#C53030',
-		fontWeight: 'bold',
+		color: colors.danger,
+		fontWeight: fontWeights.bold,
 	},
 
 	button: {
-		backgroundColor: '#102A43',
+		backgroundColor: colors.brand,
 		padding: 15,
-		borderRadius: 12,
+		borderRadius: radii.md,
 		alignItems: 'center',
-		marginTop: 12,
+		marginTop: spacing.md,
 	},
 
 	buttonText: {
-		color: '#FFFFFF',
-		fontWeight: 'bold',
+		color: colors.surface,
+		fontWeight: fontWeights.bold,
 	},
 
 	waitingPayment: {
-		backgroundColor: '#FFF8E6',
-		borderRadius: 10,
+		backgroundColor: colors.warningSoft,
+		borderRadius: radii.sm,
 		padding: 11,
 		marginTop: 14,
 	},
 
 	waitingPaymentText: {
-		color: '#8D5A00',
+		color: colors.warning,
 		fontSize: 12,
 		lineHeight: 18,
 	},
 
 	complete: {
-		backgroundColor: '#E3FCEC',
+		backgroundColor: colors.successSoft,
 		padding: 13,
-		borderRadius: 10,
+		borderRadius: radii.sm,
 		alignItems: 'center',
-		marginTop: 12,
+		marginTop: spacing.md,
 	},
 
 	completeText: {
-		color: '#147D64',
-		fontWeight: 'bold',
+		color: colors.success,
+		fontWeight: fontWeights.bold,
 	},
 
 	overlay: {
@@ -559,55 +560,55 @@ const styles = StyleSheet.create({
 	},
 
 	modal: {
-		backgroundColor: '#FFFFFF',
+		backgroundColor: colors.surface,
 		padding: 22,
-		borderRadius: 18,
+		borderRadius: radii.xl,
 	},
 
 	modalTitle: {
-		color: '#102A43',
+		color: colors.brand,
 		fontSize: 22,
-		fontWeight: 'bold',
+		fontWeight: fontWeights.bold,
 	},
 
 	modalPedido: {
-		color: '#627D98',
+		color: colors.muted,
 		marginTop: 5,
-		marginBottom: 20,
+		marginBottom: spacing.xl,
 	},
 
 	modalLabel: {
-		color: '#243B53',
-		marginBottom: 8,
+		color: colors.text,
+		marginBottom: spacing.sm,
 	},
 
 	input: {
 		borderWidth: 1,
-		borderColor: '#D9E2EC',
-		borderRadius: 12,
+		borderColor: colors.border,
+		borderRadius: radii.md,
 		padding: 15,
 		fontSize: 18,
 	},
 
-	methods: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-	methodButton: { borderWidth: 1, borderColor: '#BCCCDC', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-	methodButtonSelected: { backgroundColor: '#102A43', borderColor: '#102A43' },
-	methodText: { color: '#334E68', fontWeight: '600' },
-	methodTextSelected: { color: '#FFFFFF' },
-	pendingReview: { margin: 20, marginBottom: 0 }, reviewTitle: { color: '#102A43', fontSize: 18, fontWeight: 'bold', marginBottom: 10 }, reviewCard: { backgroundColor: '#FFF7ED', borderRadius: 14, padding: 14, marginBottom: 10 }, reviewAmount: { color: '#B7791F', fontWeight: 'bold', marginTop: 5 }, reviewActions: { flexDirection: 'row', gap: 8, marginTop: 10 }, approveButton: { flex: 1, backgroundColor: '#147D64', padding: 10, borderRadius: 9, alignItems: 'center' }, approveText: { color: '#FFF', fontWeight: 'bold' }, rejectButton: { flex: 1, backgroundColor: '#FFF0F0', padding: 10, borderRadius: 9, alignItems: 'center' }, rejectText: { color: '#B42318', fontWeight: 'bold' },
-	proofSection: { marginTop: 12 }, proofButton: { minHeight: 55, borderWidth: 1, borderColor: '#BCCCDC', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, proofCard: { flexDirection: 'row', backgroundColor: '#F8FAFC', padding: 8, borderRadius: 12 }, proofThumbnail: { width: 70, height: 70, borderRadius: 8 }, proofInfo: { flex: 1, marginLeft: 10, justifyContent: 'center', gap: 6 }, attachedText: { color: '#147D64', fontWeight: 'bold' }, viewProof: { color: '#102A43', fontWeight: 'bold' }, changeProof: { color: '#486581', fontWeight: '600' }, imageModal: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' }, fullImage: { width: '100%', height: '85%' }, closeImage: { position: 'absolute', top: 50, right: 20, zIndex: 10 }, closeText: { color: '#FFF', fontSize: 36 },
+	methods: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
+	methodButton: { borderWidth: 1, borderColor: colors.border, borderRadius: radii.sm, paddingHorizontal: spacing.md, paddingVertical: 10 },
+	methodButtonSelected: { backgroundColor: colors.brand, borderColor: colors.brand },
+	methodText: { color: '#334E68', fontWeight: fontWeights.semibold },
+	methodTextSelected: { color: colors.surface },
+	pendingReview: { margin: spacing.xl, marginBottom: 0 }, reviewTitle: { color: colors.brand, fontSize: 18, fontWeight: fontWeights.bold, marginBottom: 10 }, reviewCard: { backgroundColor: colors.warningSoft, borderRadius: 14, padding: 14, marginBottom: 10 }, reviewAmount: { color: colors.warning, fontWeight: fontWeights.bold, marginTop: 5 }, reviewActions: { flexDirection: 'row', gap: spacing.sm, marginTop: 10 }, approveButton: { flex: 1, backgroundColor: colors.success, padding: 10, borderRadius: 9, alignItems: 'center' }, approveText: { color: '#FFF', fontWeight: fontWeights.bold }, rejectButton: { flex: 1, backgroundColor: colors.dangerSoft, padding: 10, borderRadius: 9, alignItems: 'center' }, rejectText: { color: colors.danger, fontWeight: fontWeights.bold },
+	proofSection: { marginTop: spacing.md }, proofButton: { minHeight: 55, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center' }, proofCard: { flexDirection: 'row', backgroundColor: '#F8FAFC', padding: spacing.sm, borderRadius: radii.md }, proofThumbnail: { width: 70, height: 70, borderRadius: 8 }, proofInfo: { flex: 1, marginLeft: 10, justifyContent: 'center', gap: 6 }, attachedText: { color: colors.success, fontWeight: fontWeights.bold }, viewProof: { color: colors.brand, fontWeight: fontWeights.bold }, changeProof: { color: '#486581', fontWeight: fontWeights.semibold }, imageModal: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' }, fullImage: { width: '100%', height: '85%' }, closeImage: { position: 'absolute', top: 50, right: 20, zIndex: 10 }, closeText: { color: '#FFF', fontSize: 36 },
 
 	confirmButton: {
-		backgroundColor: '#102A43',
+		backgroundColor: colors.brand,
 		padding: 15,
-		borderRadius: 12,
+		borderRadius: radii.md,
 		alignItems: 'center',
 		marginTop: 15,
 	},
 
 	cancel: {
 		textAlign: 'center',
-		color: '#627D98',
+		color: colors.muted,
 		marginTop: 18,
 	},
 });

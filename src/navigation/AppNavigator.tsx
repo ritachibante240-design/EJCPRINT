@@ -1,4 +1,5 @@
 import React from 'react';
+import { colors, fontWeights } from '../theme';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -25,9 +26,9 @@ export default function AppNavigator() {
       <Stack.Navigator
         initialRouteName="Acesso"
         screenOptions={{
-          headerTintColor: '#102A43',
+          headerTintColor: colors.brand,
           headerTitleStyle: {
-            fontWeight: 'bold',
+            fontWeight: fontWeights.bold,
           },
         }}
       >

@@ -1,4 +1,5 @@
 import { showAppAlert } from '../../components/AppAlert';
+import { colors, fontWeights, radii, spacing } from '../../theme';
 import ActionButton from '../../components/ActionButton';
 import { obterTokenAdministrador } from '../../services/adminAuthService';
 import { abrirArquivoPedido } from '../../services/arquivoRemotoService';
@@ -148,21 +149,21 @@ export default function PagamentosPendentesScreen() {
 }
 
 const styles = StyleSheet.create({
-  list: { padding: 20, paddingBottom: 100, backgroundColor: '#F5F7FA', flexGrow: 1 },
-  title: { color: '#102A43', fontSize: 26, fontWeight: 'bold' },
-  subtitle: { color: '#627D98', marginTop: 5, marginBottom: 18 },
-  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 12 },
-  order: { color: '#102A43', fontWeight: 'bold', fontSize: 17 },
-  client: { color: '#627D98', marginTop: 3 },
-  amount: { color: '#B7791F', fontWeight: 'bold', marginTop: 12 },
-  info: { color: '#627D98', marginTop: 5 },
-  proof: { width: '100%', height: 180, borderRadius: 12, marginTop: 12 },
-  openProof: { marginTop: 12, borderRadius: 10, backgroundColor: '#F0F4F8', padding: 14, alignItems: 'center' },
-  openProofText: { color: '#102A43', fontWeight: 'bold' },
+  list: { padding: spacing.xl, paddingBottom: 100, backgroundColor: colors.background, flexGrow: 1 },
+  title: { color: colors.brand, fontSize: 26, fontWeight: fontWeights.bold },
+  subtitle: { color: colors.muted, marginTop: 5, marginBottom: 18 },
+  card: { backgroundColor: '#FFF', borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing.md },
+  order: { color: colors.brand, fontWeight: fontWeights.bold, fontSize: 17 },
+  client: { color: colors.muted, marginTop: 3 },
+  amount: { color: colors.warning, fontWeight: fontWeights.bold, marginTop: spacing.md },
+  info: { color: colors.muted, marginTop: 5 },
+  proof: { width: '100%', height: 180, borderRadius: radii.md, marginTop: spacing.md },
+  openProof: { marginTop: spacing.md, borderRadius: radii.sm, backgroundColor: colors.brandSoft, padding: 14, alignItems: 'center' },
+  openProofText: { color: colors.brand, fontWeight: fontWeights.bold },
   actions: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  reject: { flex: 1, borderWidth: 1, borderColor: '#FDA29B', borderRadius: 10, padding: 13, alignItems: 'center' },
-  rejectText: { color: '#B42318', fontWeight: 'bold' },
-  approve: { flex: 1, backgroundColor: '#147D64', borderRadius: 10, padding: 13, alignItems: 'center' },
-  empty: { color: '#829AB1', textAlign: 'center', marginTop: 60 },
+  reject: { flex: 1, borderWidth: 1, borderColor: '#FDA29B', borderRadius: radii.sm, padding: 13, alignItems: 'center' },
+  rejectText: { color: colors.danger, fontWeight: fontWeights.bold },
+  approve: { flex: 1, backgroundColor: colors.success, borderRadius: radii.sm, padding: 13, alignItems: 'center' },
+  empty: { color: colors.subtle, textAlign: 'center', marginTop: 60 },
   loading: { marginTop: 40 },
 });

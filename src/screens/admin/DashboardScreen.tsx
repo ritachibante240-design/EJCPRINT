@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 
 import {
   View,
@@ -7,15 +8,20 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 
 import { useFocusEffect } from '@react-navigation/native';
 import { useResponsiveContent } from '../../hooks/useResponsive';
 import { showAppAlert } from '../../components/AppAlert';
+import { contarPagamentosPendentes } from '../../services/pagamentoService';
+import { listarStock } from '../../services/stockService';
+import { colors, fontWeights, radii, spacing } from '../../theme';
 
 
 import {
   obterEstatisticasPedidos,
+  obterPedidosHoje,
   obterResumoFinanceiro,
   EstatisticasPedidos,
   ResumoFinanceiro,
@@ -37,7 +43,10 @@ const estatisticasIniciais: EstatisticasPedidos = {
 export default function DashboardScreen({
   navigation,
 }: any) {
-  const { contentStyle, isDesktop } = useResponsiveContent(20);
+  const { contentStyle } = useResponsiveContent(20);
+  const [pedidosHoje, setPedidosHoje] = useState(0);
+  const [pagamentosPendentes, setPagamentosPendentes] = useState(0);
+  const [stockBaixo, setStockBaixo] = useState(0);
   const [estatisticas, setEstatisticas] =
     useState<EstatisticasPedidos>(estatisticasIniciais);
 
@@ -61,15 +70,21 @@ export default function DashboardScreen({
 
   async function carregarDashboard() {
     try {
-      const dadosEstatisticas =
-        await obterEstatisticasPedidos();
-      const dadosFinanceiros =
-        await obterResumoFinanceiro();
-      const saidas = await obterResumoSaidas();
+      const [dadosEstatisticas, dadosFinanceiros, saidas, totalHoje, pendentes, stock] = await Promise.all([
+        obterEstatisticasPedidos(),
+        obterResumoFinanceiro(),
+        obterResumoSaidas(),
+        obterPedidosHoje(),
+        contarPagamentosPendentes(),
+        listarStock(),
+      ]);
 
       setEstatisticas(dadosEstatisticas);
       setFinanceiro(dadosFinanceiros);
       setResumoSaidas(saidas);
+      setPedidosHoje(totalHoje);
+      setPagamentosPendentes(pendentes);
+      setStockBaixo(stock.filter((item) => item.quantidade <= item.stock_minimo).length);
     } catch (erro) {
       console.error(
         'Erro ao carregar Dashboard:',
@@ -107,114 +122,97 @@ export default function DashboardScreen({
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, isDesktop && { maxWidth: 1000, width: '100%', alignSelf: 'center' }]}
+      contentContainerStyle={[styles.content, contentStyle]}
     >
-      <Text style={styles.title}>
-        Área de atendimento
-      </Text>
-
-      <Text style={styles.subtitle}>
-        Comece pela tarefa que precisa resolver agora.
-      </Text>
-
-      <Text style={styles.sectionTitle}>
-        Ações rápidas
-      </Text>
-
-      <Pressable
-        style={styles.menuButton}
-        onPress={() => navigation.navigate('PedidosAdmin')}
-      >
-        <View>
-          <Text style={styles.menuTitle}>Gerir pedidos</Text>
-          <Text style={styles.menuDescription}>
-            {estatisticas.pedidosPendentes} pedido(s) a acompanhar
-          </Text>
-        </View>
-        <Text style={styles.arrow}>›</Text>
-      </Pressable>
-
-      <Pressable
-        style={styles.menuButton}
-        onPress={() => navigation.navigate('Vendas')}
-      >
-        <View>
-          <Text style={styles.menuTitle}>Registar pagamento</Text>
-          <Text style={styles.menuDescription}>
-            {financeiro.valorPendente.toFixed(2)} MT ainda por receber
-          </Text>
-        </View>
-        <Text style={styles.arrow}>›</Text>
-      </Pressable>
-
-      <Pressable
-        style={styles.menuButton}
-        onPress={() => navigation.navigate('Stock')}
-      >
-        <View>
-          <Text style={styles.menuTitle}>Atualizar stock</Text>
-          <Text style={styles.menuDescription}>
-            Registar compras, saídas e desperdícios
-          </Text>
-        </View>
-        <Text style={styles.arrow}>›</Text>
-      </Pressable>
-
-      <View style={styles.mainCard}>
-        <Text style={styles.mainLabel}>
-          Dinheiro recebido
-        </Text>
-
-        <Text style={styles.money}>
-          {financeiro.valorRecebido.toFixed(2)} MT
-        </Text>
-
-        <Text style={styles.mainDescription}>
-          Pagamentos realmente registados
-        </Text>
-      </View>
-
-      <View style={styles.row}>
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>
-            Pedidos
-          </Text>
-
-          <Text style={styles.cardValue}>
-            {estatisticas.totalPedidos}
-          </Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>
-            Pendentes
-          </Text>
-
-          <Text style={styles.cardValue}>
-            {estatisticas.pedidosPendentes}
-          </Text>
+      <View style={styles.brandHeader}>
+        <Image
+          source={require("../../../assets/ejc-print-logo.png")}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="Logótipo EJC Print"
+        />
+        <View style={styles.brandCopy}>
+          <Text style={styles.title}>Painel de gestão</Text>
+          <Text style={styles.subtitle}>Visão geral da EJC Print</Text>
         </View>
       </View>
 
+      <Text style={styles.sectionTitle}>Resumo do negócio</Text>
+
+      <View style={styles.row}>
+        <Pressable
+          style={styles.metricCard}
+          onPress={() => navigation.getParent()?.navigate("PedidosAdmin")}
+        >
+          <View style={[styles.metricIcon, styles.metricIconInfo]}>
+            <Ionicons
+              name="file-tray-full-outline"
+              size={20}
+              color={colors.info}
+            />
+          </View>
+          <Text style={styles.metricLabel}>Pedidos de hoje</Text>
+          <Text style={styles.metricValue}>{pedidosHoje}</Text>
+          <Text style={styles.metricHint}>Pedidos recebidos hoje</Text>
+        </Pressable>
+        <Pressable
+          style={styles.metricCard}
+          onPress={() => navigation.getParent()?.navigate("PagamentosPendentes")}
+        >
+          <View style={[styles.metricIcon, styles.metricIconWarning]}>
+            <Ionicons name="time-outline" size={20} color={colors.warning} />
+          </View>
+          <Text style={styles.metricLabel}>Pagamentos pendentes</Text>
+          <Text style={[styles.metricValue, styles.metricWarningValue]}>
+            {pagamentosPendentes}
+          </Text>
+          <Text style={styles.metricHint}>Aguardam análise</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.row}>
+        <Pressable
+          style={styles.metricCard}
+          onPress={() => navigation.getParent()?.navigate("Vendas")}
+        >
+          <View style={[styles.metricIcon, styles.metricIconSuccess]}>
+            <Ionicons name="wallet-outline" size={20} color={colors.success} />
+          </View>
+          <Text style={styles.metricLabel}>Vendas recebidas</Text>
+          <Text style={[styles.metricValue, styles.metricMoney]}>
+            {financeiro.valorRecebido.toFixed(2)} MT
+          </Text>
+          <Text style={styles.metricHint}>Total acumulado</Text>
+        </Pressable>
+        <Pressable
+          style={styles.metricCard}
+          onPress={() => navigation.getParent()?.navigate("Stock")}
+        >
+          <View style={[styles.metricIcon, styles.metricIconDanger]}>
+            <Ionicons name="cube-outline" size={20} color={colors.danger} />
+          </View>
+          <Text style={styles.metricLabel}>Stock baixo</Text>
+          <Text
+            style={[
+              styles.metricValue,
+              stockBaixo > 0 && styles.metricDangerValue,
+            ]}
+          >
+            {stockBaixo}
+          </Text>
+          <Text style={styles.metricHint}>Itens no mínimo ou abaixo</Text>
+        </Pressable>
+      </View>
+
+      <Text style={styles.sectionTitle}>Estado dos pedidos</Text>
       <View style={styles.row}>
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>
-            Entregues
-          </Text>
-
-          <Text style={styles.cardValue}>
-            {estatisticas.pedidosEntregues}
-          </Text>
+          <Text style={styles.cardLabel}>Em produção</Text>
+          <Text style={styles.cardValue}>{estatisticas.emProducao}</Text>
         </View>
-
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>
-            Em produção
-          </Text>
-
-          <Text style={styles.cardValue}>
-            {estatisticas.emProducao}
-          </Text>
+          <Text style={styles.cardLabel}>Por acompanhar</Text>
+          <Text style={styles.cardValue}>{estatisticas.pedidosPendentes}</Text>
         </View>
       </View>
 
@@ -414,87 +412,132 @@ export default function DashboardScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: colors.background,
   },
 
   content: {
-    padding: 20,
+    padding: spacing.xl,
     paddingBottom: 40,
+    width: '100%',
   },
 
+  brandHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  logo: { width: 86, height: 54, marginRight: spacing.md },
+  brandCopy: { flex: 1 },
+  metricCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  metricIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.md,
+  },
+  metricIconInfo: { backgroundColor: colors.infoSoft },
+  metricIconWarning: { backgroundColor: colors.warningSoft },
+  metricIconSuccess: { backgroundColor: colors.successSoft },
+  metricIconDanger: { backgroundColor: colors.dangerSoft },
+  metricLabel: { color: colors.muted, fontSize: 13, minHeight: 34 },
+  metricValue: {
+    color: colors.brand,
+    fontSize: 25,
+    fontWeight: fontWeights.bold,
+    marginTop: spacing.xs,
+  },
+  metricMoney: { fontSize: 18 },
+  metricWarningValue: { color: colors.warning },
+  metricDangerValue: { color: colors.danger },
+  metricHint: { color: colors.subtle, fontSize: 11, marginTop: spacing.xs },
+
   title: {
-    fontSize: 30,
-    fontWeight: 'bold',
-    color: '#102A43',
+    fontSize: 22,
+    fontWeight: fontWeights.bold,
+    color: colors.brand,
   },
 
   subtitle: {
-    color: '#627D98',
+    color: colors.muted,
     marginTop: 3,
-    marginBottom: 25,
+    marginBottom: 0,
   },
 
   mainCard: {
-    backgroundColor: '#102A43',
+    backgroundColor: colors.brand,
     padding: 22,
-    borderRadius: 18,
+    borderRadius: radii.xl,
   },
 
   mainLabel: {
-    color: '#BCCCDC',
+    color: colors.border,
   },
 
   money: {
-    color: '#FFFFFF',
+    color: colors.surface,
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
     marginTop: 5,
   },
 
   mainDescription: {
-    color: '#9FB3C8',
+    color: colors.subtle,
     marginTop: 6,
     fontSize: 12,
   },
 
   row: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
+    gap: spacing.md,
+    marginTop: spacing.md,
   },
 
   card: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     padding: 18,
     borderRadius: 15,
   },
 
   cardLabel: {
-    color: '#829AB1',
+    color: colors.subtle,
     fontSize: 13,
   },
 
   cardValue: {
-    color: '#102A43',
+    color: colors.brand,
     fontSize: 26,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
     marginTop: 5,
   },
 
   sectionTitle: {
-    color: '#102A43',
+    color: colors.brand,
     fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 28,
+    fontWeight: fontWeights.bold,
+    marginTop: spacing.xxxl,
     marginBottom: 10,
   },
 
   financialCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     padding: 18,
     borderRadius: 15,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
 
   financialRow: {
@@ -505,77 +548,77 @@ const styles = StyleSheet.create({
   },
 
   financialLabel: {
-    color: '#627D98',
+    color: colors.muted,
   },
 
   financialValue: {
-    color: '#102A43',
-    fontWeight: 'bold',
+    color: colors.brand,
+    fontWeight: fontWeights.bold,
   },
 
   received: {
-    color: '#147D64',
-    fontWeight: 'bold',
+    color: colors.success,
+    fontWeight: fontWeights.bold,
   },
 
   pending: {
-    color: '#B7791F',
-    fontWeight: 'bold',
+    color: colors.warning,
+    fontWeight: fontWeights.bold,
   },
 
   expense: {
-    color: '#C53030',
-    fontWeight: 'bold',
+    color: colors.danger,
+    fontWeight: fontWeights.bold,
   },
 
   stockPurchase: {
-    color: '#B7791F',
-    fontWeight: 'bold',
+    color: colors.warning,
+    fontWeight: fontWeights.bold,
   },
 
   separator: {
     height: 1,
-    backgroundColor: '#E6EAF0',
+    backgroundColor: colors.border,
     marginBottom: 14,
   },
 
   resultLabel: {
-    color: '#102A43',
+    color: colors.brand,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
   },
 
   result: {
-    color: '#147D64',
+    color: colors.success,
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
   },
 
   negativeResult: {
-    color: '#C53030',
+    color: colors.danger,
   },
 
   investmentCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     padding: 18,
     borderRadius: 15,
   },
 
   investmentValue: {
-    color: '#102A43',
+    color: colors.brand,
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
     marginTop: 5,
   },
 
   note: {
-    color: '#829AB1',
+    color: colors.subtle,
     fontSize: 12,
     marginTop: 5,
   },
 
   menuButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     padding: 18,
     borderRadius: 15,
     flexDirection: 'row',
@@ -585,31 +628,31 @@ const styles = StyleSheet.create({
   },
 
   menuTitle: {
-    color: '#102A43',
+    color: colors.brand,
     fontSize: 17,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
   },
 
   menuDescription: {
-    color: '#829AB1',
+    color: colors.subtle,
     marginTop: 5,
     fontSize: 12,
   },
 
   arrow: {
     fontSize: 30,
-    color: '#829AB1',
+    color: colors.subtle,
   },
 
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F7FA',
+    backgroundColor: colors.background,
   },
 
   loadingText: {
     marginTop: 10,
-    color: '#627D98',
+    color: colors.muted,
   },
 });

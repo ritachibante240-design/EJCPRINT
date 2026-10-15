@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { colors, fontWeights, radii, spacing } from '../../theme';
 import {
   ActivityIndicator,
   Image,
@@ -43,7 +44,7 @@ export default function LoginAdministradorScreen({ navigation }: any) {
         onPress={() => navigation.navigate('Acesso')}
         style={styles.backButtonTop}
       >
-        <Ionicons name="arrow-back" size={16} color="#627D98" />
+        <Ionicons name="arrow-back" size={16} color={colors.muted} />
         <Text style={styles.backButtonText}>Voltar</Text>
       </Pressable>
 
@@ -51,7 +52,7 @@ export default function LoginAdministradorScreen({ navigation }: any) {
         <Image source={require('../../../assets/ejc-print-logo.png')} style={styles.logo} resizeMode="contain" />
       )}
       <View style={styles.eyebrow}>
-        <Ionicons name="shield-checkmark-outline" size={18} color="#147D64" />
+        <Ionicons name="shield-checkmark-outline" size={18} color={colors.success} />
         <Text style={styles.eyebrowText}>ÁREA ADMINISTRATIVA</Text>
       </View>
       <Text style={styles.title}>Entrar no painel</Text>
@@ -84,12 +85,12 @@ export default function LoginAdministradorScreen({ navigation }: any) {
           style={styles.eyeButton}
           onPress={() => setMostrarPassword((v) => !v)}
         >
-          <Ionicons name={mostrarPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color="#627D98" />
+          <Ionicons name={mostrarPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.muted} />
         </Pressable>
       </View>
       {erro ? <Text style={styles.error}>{erro}</Text> : null}
       <Pressable style={[styles.button, enviando && styles.buttonDisabled]} disabled={enviando} onPress={entrar}>
-        {enviando ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Entrar</Text>}
+        {enviando ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>Entrar</Text>}
       </Pressable>
       <Pressable onPress={() => navigation.navigate('RecuperarPassword')} style={styles.forgot}>
         <Text style={styles.forgotText}>Esqueci a palavra-passe</Text>
@@ -140,64 +141,64 @@ export default function LoginAdministradorScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   // ── Mobile ──────────────────────────────────────────────────
-  container: { flex: 1, justifyContent: 'center', backgroundColor: '#F5F7FA', padding: 20 },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: 24 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 22, borderWidth: 1, borderColor: '#E6EAF0' },
+  container: { flex: 1, justifyContent: 'center', backgroundColor: colors.background, padding: spacing.xl },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xxl },
+  card: { backgroundColor: colors.surface, borderRadius: radii.lg, padding: 22, borderWidth: 1, borderColor: colors.border },
   backButtonTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     alignSelf: 'flex-start',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     borderRadius: 8,
-    backgroundColor: '#F0F4F8',
+    backgroundColor: colors.brandSoft,
   },
   backButtonText: {
-    color: '#627D98',
+    color: colors.muted,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: fontWeights.semibold,
   },
-  logo: { width: 170, height: 60, alignSelf: 'flex-start', marginBottom: 12 },
-  eyebrow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 12 },
-  eyebrowText: { color: '#147D64', fontSize: 12, fontWeight: 'bold', letterSpacing: 0.8 },
-  title: { color: '#102A43', fontSize: 25, fontWeight: 'bold' },
-  subtitle: { color: '#627D98', marginTop: 7, marginBottom: 22, lineHeight: 20 },
-  label: { color: '#243B53', fontSize: 13, fontWeight: '600', marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: '#D9E2EC', borderRadius: 10, color: '#102A43', paddingHorizontal: 13, paddingVertical: 12, marginBottom: 14, backgroundColor: '#FBFCFE' },
+  logo: { width: 170, height: 60, alignSelf: 'flex-start', marginBottom: spacing.md },
+  eyebrow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: spacing.md },
+  eyebrowText: { color: colors.success, fontSize: 12, fontWeight: fontWeights.bold, letterSpacing: 0.8 },
+  title: { color: colors.brand, fontSize: 25, fontWeight: fontWeights.bold },
+  subtitle: { color: colors.muted, marginTop: 7, marginBottom: 22, lineHeight: 20 },
+  label: { color: colors.text, fontSize: 13, fontWeight: fontWeights.semibold, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: radii.sm, color: colors.brand, paddingHorizontal: 13, paddingVertical: spacing.md, marginBottom: 14, backgroundColor: '#FBFCFE' },
   passwordField: { position: 'relative', marginBottom: 14 },
-  passwordInput: { borderWidth: 1, borderColor: '#D9E2EC', borderRadius: 10, color: '#102A43', paddingLeft: 13, paddingRight: 48, paddingVertical: 12, backgroundColor: '#FBFCFE' },
+  passwordInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radii.sm, color: colors.brand, paddingLeft: 13, paddingRight: 48, paddingVertical: spacing.md, backgroundColor: '#FBFCFE' },
   eyeButton: { position: 'absolute', right: 4, top: 2, bottom: 2, width: 44, alignItems: 'center', justifyContent: 'center' },
-  error: { color: '#B42318', marginBottom: 12, lineHeight: 19 },
-  button: { backgroundColor: '#102A43', alignItems: 'center', borderRadius: 10, minHeight: 48, justifyContent: 'center', marginTop: 4 },
+  error: { color: colors.danger, marginBottom: spacing.md, lineHeight: 19 },
+  button: { backgroundColor: colors.brand, alignItems: 'center', borderRadius: radii.sm, minHeight: 48, justifyContent: 'center', marginTop: spacing.xs },
   buttonDisabled: { opacity: 0.7 },
-  buttonText: { color: '#FFFFFF', fontWeight: 'bold' },
-  forgot: { alignItems: 'center', paddingTop: 16 },
-  forgotText: { color: '#1D4ED8', fontWeight: '600' },
+  buttonText: { color: colors.surface, fontWeight: fontWeights.bold },
+  forgot: { alignItems: 'center', paddingTop: spacing.lg },
+  forgotText: { color: colors.accent, fontWeight: fontWeights.semibold },
 
   // ── Desktop ──────────────────────────────────────────────────
   desktopRoot: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#F5F7FA',
+    backgroundColor: colors.background,
   },
   desktopBranding: {
     flex: 1,
-    backgroundColor: '#102A43',
+    backgroundColor: colors.brand,
     padding: 56,
     justifyContent: 'center',
   },
-  logoDesktopPlate: { alignSelf: 'flex-start', backgroundColor: '#FFFFFF', borderRadius: 10, marginBottom: 36, paddingHorizontal: 12, paddingVertical: 8 },
+  logoDesktopPlate: { alignSelf: 'flex-start', backgroundColor: colors.surface, borderRadius: radii.sm, marginBottom: 36, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   logoDesktop: { width: 280, height: 112 },
-  brandingTitle: { color: '#FFFFFF', fontSize: 32, fontWeight: 'bold', marginBottom: 12 },
-  brandingSubtitle: { color: '#9FB3C8', fontSize: 16, lineHeight: 24, marginBottom: 40 },
-  brandingFeatures: { gap: 16 },
-  brandingFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  brandingFeatureText: { color: '#D9E8F5', fontSize: 15 },
+  brandingTitle: { color: colors.surface, fontSize: 32, fontWeight: fontWeights.bold, marginBottom: spacing.md },
+  brandingSubtitle: { color: colors.subtle, fontSize: 16, lineHeight: 24, marginBottom: 40 },
+  brandingFeatures: { gap: spacing.lg },
+  brandingFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  brandingFeatureText: { color: colors.brandSoft, fontSize: 15 },
   desktopFormPanel: {
     width: 480,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 48,
@@ -205,7 +206,7 @@ const styles = StyleSheet.create({
   cardDesktop: {
     width: '100%',
     maxWidth: 400,
-    shadowColor: '#102A43',
+    shadowColor: colors.brand,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 16,

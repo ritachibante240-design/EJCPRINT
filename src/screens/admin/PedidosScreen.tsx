@@ -30,6 +30,7 @@ import { obterNomeEstado, obterProximaAcao } from "../../utils/estadoPedido";
 import { Ionicons } from "@expo/vector-icons";
 import { abrirArquivoPedido } from "../../services/arquivoRemotoService";
 import { obterTokenAdministrador } from "../../services/adminAuthService";
+import { colors, fontWeights, radii, spacing } from '../../theme';
 
 const estados = [
   "Pedido recebido",
@@ -471,20 +472,32 @@ export default function PedidosScreen() {
           <View
             style={[
               styles.statusBadge,
+              item.estado === "Pedido recebido" && styles.statusReceived,
+              item.estado === "Em preparação" && styles.statusPreparing,
               item.estado === "Entregue" && styles.statusDelivered,
               item.estado === "Em impressão" && styles.statusPrinting,
               item.estado === "Pronto para levantamento" && styles.statusReady,
               item.estado === "Cancelado" && styles.statusCancelled,
             ]}
           >
-            <Text style={styles.statusText}>
+            <Text
+              style={[
+                styles.statusText,
+                item.estado === "Pedido recebido" && styles.statusTextReceived,
+                item.estado === "Em preparação" && styles.statusTextPreparing,
+                item.estado === "Em impressão" && styles.statusTextPrinting,
+                item.estado === "Pronto para levantamento" && styles.statusTextReady,
+                item.estado === "Entregue" && styles.statusTextDelivered,
+                item.estado === "Cancelado" && styles.statusTextCancelled,
+              ]}
+            >
               {obterNomeEstado(item.estado, item.servico)}
             </Text>
           </View>
         </View>
         <View style={styles.serviceRow}>
           <View style={styles.serviceIcon}>
-            <Ionicons name="print-outline" size={22} color="#102A43" />
+            <Ionicons name="print-outline" size={22} color={colors.brand} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.serviceName}>{item.servico}</Text>
@@ -506,7 +519,7 @@ export default function PedidosScreen() {
             </View>
           ) : (
             <View style={styles.paidBadge}>
-              <Ionicons name="checkmark-circle" size={17} color="#147D64" />
+              <Ionicons name="checkmark-circle" size={17} color={colors.success} />
               <Text style={styles.paidText}>Pago</Text>
             </View>
           )}
@@ -521,7 +534,7 @@ export default function PedidosScreen() {
           <Ionicons
             name={aberto ? "chevron-up" : "chevron-down"}
             size={19}
-            color="#102A43"
+            color={colors.brand}
           />
         </Pressable>
         {aberto && (
@@ -547,7 +560,7 @@ export default function PedidosScreen() {
                 style={styles.downloadButton}
                 onPress={() => baixarDocumento(item)}
               >
-                <Ionicons name="download-outline" size={19} color="#102A43" />
+                <Ionicons name="download-outline" size={19} color={colors.brand} />
                 <Text style={styles.downloadButtonText}>Baixar documento</Text>
               </Pressable>
             )}
@@ -558,8 +571,8 @@ export default function PedidosScreen() {
                 onPress={() => anexarDocumento(item)}
               >
                 {documentoProcessando === item.id
-                  ? <ActivityIndicator size="small" color="#102A43" />
-                  : <Ionicons name="cloud-upload-outline" size={19} color="#102A43" />}
+                  ? <ActivityIndicator size="small" color={colors.brand} />
+                  : <Ionicons name="cloud-upload-outline" size={19} color={colors.brand} />}
                 <Text style={styles.downloadButtonText}>
                   {documentoProcessando === item.id ? "A enviar documento..." : "Anexar documento"}
                 </Text>
@@ -589,7 +602,7 @@ export default function PedidosScreen() {
                 <Ionicons
                   name="lock-closed-outline"
                   size={18}
-                  color="#9A6700"
+                  color={colors.warning}
                 />
                 <Text style={styles.paymentWarningText}>
                   Aguardando confirmação de 50% do pagamento (
@@ -599,7 +612,7 @@ export default function PedidosScreen() {
             )}
             {saldoBloqueado && (
               <View style={styles.paymentWarning}>
-                <Ionicons name="wallet-outline" size={18} color="#9A6700" />
+                <Ionicons name="wallet-outline" size={18} color={colors.warning} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.paymentWarningText}>
                     Falta pagar {falta.toFixed(2)} MT
@@ -640,7 +653,7 @@ export default function PedidosScreen() {
                 ]}
                 onPress={() => proximoEstado(item)}
               >
-                {pedidoProcessando === item.id ? <ActivityIndicator color="#FFFFFF" /> : <><Ionicons name={sinalBloqueado || saldoBloqueado ? "lock-closed-outline" : "arrow-forward-circle-outline"} size={20} color="#FFFFFF" /><Text style={styles.advanceText}>{sinalBloqueado ? "Aguardando sinal de 50%" : saldoBloqueado ? "Aguardando pagamento" : obterProximaAcao(item.estado, item.servico)}</Text></>}
+                {pedidoProcessando === item.id ? <ActivityIndicator color={colors.surface} /> : <><Ionicons name={sinalBloqueado || saldoBloqueado ? "lock-closed-outline" : "arrow-forward-circle-outline"} size={20} color={colors.surface} /><Text style={styles.advanceText}>{sinalBloqueado ? "Aguardando sinal de 50%" : saldoBloqueado ? "Aguardando pagamento" : obterProximaAcao(item.estado, item.servico)}</Text></>}
               </Pressable>
             )}
           </View>
@@ -690,33 +703,33 @@ export default function PedidosScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.background,
   },
 
   content: {
-    padding: 20,
+    padding: spacing.xl,
     paddingBottom: 40,
   },
 
   pageHeader: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
 
   title: {
     fontSize: 28,
-    fontWeight: "bold",
-    color: "#102A43",
+    fontWeight: fontWeights.bold,
+    color: colors.brand,
   },
 
   subtitle: {
-    color: "#829AB1",
-    marginTop: 4,
+    color: colors.subtle,
+    marginTop: spacing.xs,
   },
 
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
     padding: 18,
-    borderRadius: 16,
+    borderRadius: radii.lg,
     marginBottom: 15,
   },
 
@@ -728,47 +741,47 @@ const styles = StyleSheet.create({
 
   numero: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#102A43",
+    fontWeight: fontWeights.bold,
+    color: colors.brand,
   },
 
   status: {
-    backgroundColor: "#E3F8FF",
+    backgroundColor: colors.infoSoft,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: radii.xxl,
     maxWidth: "55%",
   },
 
   statusText: {
-    color: "#086F83",
+    color: colors.info,
     fontSize: 11,
-    fontWeight: "bold",
+    fontWeight: fontWeights.bold,
   },
 
   statusEntregue: {
-    backgroundColor: "#E3FCEC",
+    backgroundColor: colors.successSoft,
   },
 
   statusEntregueText: {
-    color: "#147D64",
+    color: colors.success,
   },
 
   cliente: {
     fontSize: 17,
-    fontWeight: "600",
-    color: "#243B53",
-    marginTop: 16,
+    fontWeight: fontWeights.semibold,
+    color: colors.text,
+    marginTop: spacing.lg,
   },
 
   contacto: {
-    color: "#829AB1",
+    color: colors.subtle,
     marginTop: 3,
   },
 
   divider: {
     height: 1,
-    backgroundColor: "#E6EAF0",
+    backgroundColor: colors.border,
     marginVertical: 15,
   },
 
@@ -779,73 +792,73 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    color: "#829AB1",
+    color: colors.subtle,
   },
 
   value: {
-    color: "#243B53",
-    fontWeight: "500",
+    color: colors.text,
+    fontWeight: fontWeights.medium,
     maxWidth: "60%",
   },
 
   costBox: {
-    backgroundColor: "#FFF7ED",
+    backgroundColor: colors.warningSoft,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: radii.md,
     marginTop: 10,
   },
 
   costTitle: {
-    color: "#102A43",
-    fontWeight: "bold",
+    color: colors.brand,
+    fontWeight: fontWeights.bold,
     marginBottom: 5,
   },
 
   summaryBox: {
-    backgroundColor: "#F0F4F8",
+    backgroundColor: colors.brandSoft,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: radii.md,
     marginTop: 14,
   },
 
   financeBox: {
     backgroundColor: "#F7FAFC",
     padding: 14,
-    borderRadius: 12,
+    borderRadius: radii.md,
     marginTop: 10,
   },
 
   summaryTitle: {
-    color: "#102A43",
+    color: colors.brand,
     fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 12,
+    fontWeight: fontWeights.bold,
+    marginBottom: spacing.md,
   },
 
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
 
-  summaryLabel: { color: "#627D98" },
-  summaryValue: { color: "#102A43", fontWeight: "600" },
-  receivedValue: { color: "#147D64", fontWeight: "bold" },
-  pendingValue: { color: "#B7791F", fontWeight: "bold" },
-  costValue: { color: "#C53030", fontWeight: "600" },
-  totalCost: { color: "#C53030", fontWeight: "bold" },
+  summaryLabel: { color: colors.muted },
+  summaryValue: { color: colors.brand, fontWeight: fontWeights.semibold },
+  receivedValue: { color: colors.success, fontWeight: fontWeights.bold },
+  pendingValue: { color: colors.warning, fontWeight: fontWeights.bold },
+  costValue: { color: colors.danger, fontWeight: fontWeights.semibold },
+  totalCost: { color: colors.danger, fontWeight: fontWeights.bold },
 
   marginBox: {
-    backgroundColor: "#E3FCEC",
-    padding: 12,
-    borderRadius: 10,
+    backgroundColor: colors.successSoft,
+    padding: spacing.md,
+    borderRadius: radii.sm,
     marginTop: 10,
   },
 
   orderCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
     padding: 17,
     marginBottom: 14,
   },
@@ -854,63 +867,71 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
   },
-  orderNumber: { color: "#102A43", fontSize: 18, fontWeight: "bold" },
-  clientName: { color: "#627D98", marginTop: 3 },
+  orderNumber: { color: colors.brand, fontSize: 18, fontWeight: fontWeights.bold },
+  clientName: { color: colors.muted, marginTop: 3 },
   statusBadge: {
-    backgroundColor: "#E6EAF0",
+    backgroundColor: colors.border,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: radii.xxl,
     maxWidth: "48%",
   },
-  statusDelivered: { backgroundColor: "#E3FCEC" },
-  statusPrinting: { backgroundColor: "#E8F1FF" },
-  statusReady: { backgroundColor: "#FFF3C4" },
-  statusCancelled: { backgroundColor: "#FFF0F0" },
+  statusReceived: { backgroundColor: colors.infoSoft },
+  statusPreparing: { backgroundColor: colors.accentSoft },
+  statusDelivered: { backgroundColor: colors.successSoft },
+  statusPrinting: { backgroundColor: colors.accentSoft },
+  statusReady: { backgroundColor: colors.warningSoft },
+  statusCancelled: { backgroundColor: colors.dangerSoft },
+  statusTextReceived: { color: colors.info },
+  statusTextPreparing: { color: colors.accent },
+  statusTextPrinting: { color: colors.accent },
+  statusTextReady: { color: colors.warning },
+  statusTextDelivered: { color: colors.success },
+  statusTextCancelled: { color: colors.danger },
   serviceRow: { flexDirection: "row", alignItems: "center", marginTop: 18 },
   serviceIcon: {
     width: 43,
     height: 43,
-    borderRadius: 12,
-    backgroundColor: "#F0F4F8",
+    borderRadius: radii.md,
+    backgroundColor: colors.brandSoft,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 11,
   },
-  serviceName: { color: "#102A43", fontWeight: "bold", fontSize: 15 },
-  serviceDetails: { color: "#829AB1", marginTop: 3, fontSize: 13 },
+  serviceName: { color: colors.brand, fontWeight: fontWeights.bold, fontSize: 15 },
+  serviceDetails: { color: colors.subtle, marginTop: 3, fontSize: 13 },
   priceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
     marginTop: 18,
   },
-  priceLabel: { color: "#829AB1", fontSize: 12 },
-  price: { color: "#102A43", fontSize: 22, fontWeight: "bold", marginTop: 2 },
+  priceLabel: { color: colors.subtle, fontSize: 12 },
+  price: { color: colors.brand, fontSize: 22, fontWeight: fontWeights.bold, marginTop: 2 },
   paidBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#E3FCEC",
+    gap: spacing.xs,
+    backgroundColor: colors.successSoft,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: radii.xxl,
   },
-  paidText: { color: "#147D64", fontWeight: "bold", fontSize: 12 },
-  pendingSmall: { color: "#829AB1", fontSize: 11, textAlign: "right" },
-  pendingMoney: { color: "#B7791F", fontWeight: "bold", marginTop: 2 },
+  paidText: { color: colors.success, fontWeight: fontWeights.bold, fontSize: 12 },
+  pendingSmall: { color: colors.subtle, fontSize: 11, textAlign: "right" },
+  pendingMoney: { color: colors.warning, fontWeight: fontWeights.bold, marginTop: 2 },
   detailsButton: {
     minHeight: 45,
-    marginTop: 16,
+    marginTop: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: "#E6EAF0",
+    borderTopColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
     paddingTop: 10,
   },
-  detailsButtonText: { color: "#102A43", fontWeight: "600" },
+  detailsButtonText: { color: colors.brand, fontWeight: fontWeights.semibold },
   expandedArea: {
     backgroundColor: "#F8FAFC",
     borderRadius: 13,
@@ -924,25 +945,25 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   instructionsBlock: {
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#F0F4F8",
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.sm,
+    backgroundColor: colors.brandSoft,
   },
   instructionsText: { color: "#334E68", lineHeight: 20, marginTop: 5 },
-  detailLabel: { color: "#829AB1", flex: 1 },
+  detailLabel: { color: colors.subtle, flex: 1 },
   detailValue: {
-    color: "#243B53",
-    fontWeight: "600",
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
     flex: 1,
     textAlign: "right",
   },
   downloadButton: {
     minHeight: 44,
-    borderRadius: 10,
+    borderRadius: radii.sm,
     borderWidth: 1,
-    borderColor: "#BCCCDC",
-    backgroundColor: "#FFFFFF",
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -950,15 +971,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 14,
   },
-  downloadButtonText: { color: "#102A43", fontWeight: "700" },
-  separator: { height: 1, backgroundColor: "#D9E2EC", marginVertical: 10 },
-  receivedText: { color: "#147D64", fontWeight: "bold" },
-  pendingText: { color: "#B7791F", fontWeight: "bold" },
-  internalTitle: { color: "#102A43", fontWeight: "bold", marginBottom: 12 },
+  downloadButtonText: { color: colors.brand, fontWeight: fontWeights.bold },
+  separator: { height: 1, backgroundColor: colors.border, marginVertical: 10 },
+  receivedText: { color: colors.success, fontWeight: fontWeights.bold },
+  pendingText: { color: colors.warning, fontWeight: fontWeights.bold },
+  internalTitle: { color: colors.brand, fontWeight: fontWeights.bold, marginBottom: spacing.md },
   advanceButton: {
     minHeight: 48,
     borderRadius: 11,
-    backgroundColor: "#102A43",
+    backgroundColor: colors.brand,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -969,94 +990,94 @@ const styles = StyleSheet.create({
   paymentWarning: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFF8E6",
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 12,
-    gap: 8,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    marginTop: spacing.md,
+    gap: spacing.sm,
   },
   paymentWarningText: {
     flex: 1,
-    color: "#8D5A00",
+    color: colors.warning,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: fontWeights.semibold,
   },
-  paymentWarningSubtext: { marginTop: 2, color: "#A36B00", fontSize: 12 },
-  advanceText: { color: "#FFFFFF", fontWeight: "bold" },
+  paymentWarningSubtext: { marginTop: 2, color: colors.warning, fontSize: 12 },
+  advanceText: { color: colors.surface, fontWeight: fontWeights.bold },
 
-  marginLabel: { color: "#147D64", fontSize: 12 },
+  marginLabel: { color: colors.success, fontSize: 12 },
   marginValue: {
-    color: "#147D64",
+    color: colors.success,
     fontSize: 22,
-    fontWeight: "bold",
+    fontWeight: fontWeights.bold,
     marginTop: 3,
   },
 
   costText: {
-    color: "#627D98",
+    color: colors.muted,
     marginTop: 2,
   },
 
   costTotal: {
-    color: "#102A43",
-    fontWeight: "bold",
+    color: colors.brand,
+    fontWeight: fontWeights.bold,
     marginTop: 5,
   },
 
   totalArea: {
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.background,
     padding: 14,
-    borderRadius: 12,
-    marginTop: 8,
+    borderRadius: radii.md,
+    marginTop: spacing.sm,
   },
 
   totalLabel: {
-    color: "#829AB1",
+    color: colors.subtle,
     fontSize: 12,
   },
 
   total: {
-    color: "#102A43",
+    color: colors.brand,
     fontSize: 22,
-    fontWeight: "bold",
+    fontWeight: fontWeights.bold,
     marginTop: 3,
   },
 
   button: {
-    backgroundColor: "#102A43",
+    backgroundColor: colors.brand,
     padding: 15,
-    borderRadius: 12,
+    borderRadius: radii.md,
     alignItems: "center",
     marginTop: 15,
   },
 
   buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
+    color: colors.surface,
+    fontWeight: fontWeights.bold,
   },
 
   finished: {
-    backgroundColor: "#E3FCEC",
+    backgroundColor: colors.successSoft,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: radii.md,
     alignItems: "center",
     marginTop: 15,
   },
 
   finishedText: {
-    color: "#147D64",
-    fontWeight: "bold",
+    color: colors.success,
+    fontWeight: fontWeights.bold,
   },
 
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.background,
   },
 
   loading: {
-    color: "#829AB1",
+    color: colors.subtle,
     marginTop: 10,
   },
 
@@ -1071,8 +1092,8 @@ const styles = StyleSheet.create({
 
   emptyTitle: {
     fontSize: 20,
-    fontWeight: "bold",
-    color: "#102A43",
+    fontWeight: fontWeights.bold,
+    color: colors.brand,
     marginTop: 10,
   },
 });

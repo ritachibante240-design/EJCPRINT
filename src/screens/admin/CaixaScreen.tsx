@@ -1,4 +1,5 @@
 import { formatarDinheiro } from '../../utils/formatters';
+import { colors, fontWeights, radii, spacing } from '../../theme';
 import React, { useCallback, useState } from 'react';
 import {
   FlatList,
@@ -68,11 +69,11 @@ export default function CaixaScreen({ navigation }: any) {
           <>
             <View style={styles.header}>
               <View style={styles.titleRow}>
-                <Ionicons name="wallet-outline" size={28} color="#102A43" />
+                <Ionicons name="wallet-outline" size={28} color={colors.brand} />
                 <Text style={styles.title}>Caixa</Text>
               </View>
               <Text style={styles.subtitle}>Todo o dinheiro da EJC Print</Text>
-              {pagamentosPendentes > 0 && <Pressable style={styles.pendingPayments} onPress={() => navigation.getParent()?.getParent()?.navigate('PagamentosPendentes')}><Ionicons name="receipt-outline" size={23} color="#B7791F" /><View style={styles.pendingLeft}><Text style={styles.pendingTitle}>{pagamentosPendentes === 1 ? '1 pagamento para analisar' : `${pagamentosPendentes} pagamentos para analisar`}</Text><Text style={styles.pendingSubtitle}>Verifique os comprovativos</Text></View><Ionicons name="chevron-forward" size={22} color="#8D5A00" /></Pressable>}
+              {pagamentosPendentes > 0 && <Pressable style={styles.pendingPayments} onPress={() => navigation.getParent()?.getParent()?.navigate('PagamentosPendentes')}><Ionicons name="receipt-outline" size={23} color={colors.warning} /><View style={styles.pendingLeft}><Text style={styles.pendingTitle}>{pagamentosPendentes === 1 ? '1 pagamento para analisar' : `${pagamentosPendentes} pagamentos para analisar`}</Text><Text style={styles.pendingSubtitle}>Verifique os comprovativos</Text></View><Ionicons name="chevron-forward" size={22} color={colors.warning} /></Pressable>}
             </View>
 
             <View style={styles.balanceCard}>
@@ -96,16 +97,16 @@ export default function CaixaScreen({ navigation }: any) {
                 <Text style={styles.pendingLabel}>A receber</Text>
                 <Text style={styles.pendingValue}>{dinheiro(porReceber)}</Text>
               </View>
-              <Ionicons name="time-outline" size={27} color="#B7791F" />
+              <Ionicons name="time-outline" size={27} color={colors.warning} />
             </View>
 
             <View style={styles.actions}>
               <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('Vendas')}>
-                <Ionicons name="add-circle-outline" size={21} color="#FFFFFF" />
+                <Ionicons name="add-circle-outline" size={21} color={colors.surface} />
                 <Text style={styles.primaryText}>Receber pagamento</Text>
               </Pressable>
               <Pressable style={styles.secondaryButton} onPress={() => navigation.navigate('Despesas')}>
-                <Ionicons name="remove-circle-outline" size={21} color="#102A43" />
+                <Ionicons name="remove-circle-outline" size={21} color={colors.brand} />
                 <Text style={styles.secondaryText}>Registar saída</Text>
               </Pressable>
             </View>
@@ -115,7 +116,7 @@ export default function CaixaScreen({ navigation }: any) {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Ionicons name="receipt-outline" size={40} color="#BCCCDC" />
+            <Ionicons name="receipt-outline" size={40} color={colors.border} />
             <Text style={styles.emptyText}>Ainda não existem movimentos.</Text>
           </View>
         }
@@ -127,7 +128,7 @@ export default function CaixaScreen({ navigation }: any) {
                 <Ionicons
                   name={entrada ? 'arrow-down' : 'arrow-up'}
                   size={20}
-                  color={entrada ? '#147D64' : '#C53030'}
+                  color={entrada ? colors.success : colors.danger}
                 />
               </View>
               <View style={styles.movementInfo}>
@@ -146,44 +147,44 @@ export default function CaixaScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
-  content: { padding: 20, paddingTop: 55, paddingBottom: 110 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.xl, paddingTop: 55, paddingBottom: 110 },
   header: { marginBottom: 22 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  title: { color: '#102A43', fontSize: 30, fontWeight: 'bold' },
-  subtitle: { color: '#627D98', fontSize: 16, marginTop: 6 },
-  balanceCard: { backgroundColor: '#102A43', borderRadius: 20, padding: 22 },
-  balanceLabel: { color: '#BCCCDC', fontSize: 15 },
-  balance: { color: '#FFFFFF', fontSize: 38, fontWeight: 'bold', marginTop: 7 },
+  title: { color: colors.brand, fontSize: 30, fontWeight: fontWeights.bold },
+  subtitle: { color: colors.muted, fontSize: 16, marginTop: 6 },
+  balanceCard: { backgroundColor: colors.brand, borderRadius: radii.xxl, padding: 22 },
+  balanceLabel: { color: colors.border, fontSize: 15 },
+  balance: { color: colors.surface, fontSize: 38, fontWeight: fontWeights.bold, marginTop: 7 },
   balanceDivider: { height: 1, backgroundColor: '#334E68', marginVertical: 18 },
   moneyRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  smallLabel: { color: '#9FB3C8', fontSize: 13, marginBottom: 4 },
-  entryValue: { color: '#57D9A3', fontWeight: 'bold' },
-  exitValue: { color: '#FF9B9B', fontWeight: 'bold' },
-  pendingCard: { backgroundColor: '#FFFFFF', padding: 17, borderRadius: 15, marginTop: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pendingLabel: { color: '#627D98' },
-  pendingValue: { color: '#102A43', fontSize: 21, fontWeight: 'bold', marginTop: 3 },
+  smallLabel: { color: colors.subtle, fontSize: 13, marginBottom: spacing.xs },
+  entryValue: { color: '#57D9A3', fontWeight: fontWeights.bold },
+  exitValue: { color: '#FF9B9B', fontWeight: fontWeights.bold },
+  pendingCard: { backgroundColor: colors.surface, padding: 17, borderRadius: 15, marginTop: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  pendingLabel: { color: colors.muted },
+  pendingValue: { color: colors.brand, fontSize: 21, fontWeight: fontWeights.bold, marginTop: 3 },
   actions: { marginTop: 18, gap: 10 },
-  primaryButton: { backgroundColor: '#102A43', minHeight: 54, borderRadius: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  primaryText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 },
-  secondaryButton: { backgroundColor: '#FFFFFF', minHeight: 54, borderRadius: 13, borderWidth: 1, borderColor: '#BCCCDC', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  secondaryText: { color: '#102A43', fontWeight: 'bold', fontSize: 15 },
-  sectionTitle: { color: '#102A43', fontSize: 20, fontWeight: 'bold', marginTop: 28, marginBottom: 12 },
-  movement: { backgroundColor: '#FFFFFF', padding: 15, borderRadius: 14, marginBottom: 9, flexDirection: 'row', alignItems: 'center' },
+  primaryButton: { backgroundColor: colors.brand, minHeight: 54, borderRadius: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  primaryText: { color: colors.surface, fontWeight: fontWeights.bold, fontSize: 15 },
+  secondaryButton: { backgroundColor: colors.surface, minHeight: 54, borderRadius: 13, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  secondaryText: { color: colors.brand, fontWeight: fontWeights.bold, fontSize: 15 },
+  sectionTitle: { color: colors.brand, fontSize: 20, fontWeight: fontWeights.bold, marginTop: spacing.xxxl, marginBottom: spacing.md },
+  movement: { backgroundColor: colors.surface, padding: 15, borderRadius: 14, marginBottom: 9, flexDirection: 'row', alignItems: 'center' },
   movementIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  entryIcon: { backgroundColor: '#E3FCEC' },
-  exitIcon: { backgroundColor: '#FFF0F0' },
+  entryIcon: { backgroundColor: colors.successSoft },
+  exitIcon: { backgroundColor: colors.dangerSoft },
   movementInfo: { flex: 1, marginLeft: 11 },
-  movementTitle: { color: '#102A43', fontWeight: 'bold' },
-  movementDetail: { color: '#829AB1', fontSize: 12, marginTop: 3 },
-  movementValue: { fontWeight: 'bold', fontSize: 14 },
-  green: { color: '#147D64' },
-  red: { color: '#C53030' },
+  movementTitle: { color: colors.brand, fontWeight: fontWeights.bold },
+  movementDetail: { color: colors.subtle, fontSize: 12, marginTop: 3 },
+  movementValue: { fontWeight: fontWeights.bold, fontSize: 14 },
+  green: { color: colors.success },
+  red: { color: colors.danger },
   empty: { alignItems: 'center', padding: 30 },
-  emptyText: { color: '#829AB1', marginTop: 8 },
-  pendingPayments: { backgroundColor: '#FFF8E6', borderWidth: 1, borderColor: '#F6D88A', borderRadius: 16, padding: 14, marginTop: 18, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  emptyText: { color: colors.subtle, marginTop: spacing.sm },
+  pendingPayments: { backgroundColor: colors.warningSoft, borderWidth: 1, borderColor: '#F6D88A', borderRadius: radii.lg, padding: 14, marginTop: 18, flexDirection: 'row', alignItems: 'center', gap: 10 },
   pendingLeft: { flex: 1 },
-  pendingTitle: { color: '#8D5A00', fontWeight: 'bold', fontSize: 14 },
-  pendingSubtitle: { color: '#A36B00', fontSize: 12, marginTop: 3 },
+  pendingTitle: { color: colors.warning, fontWeight: fontWeights.bold, fontSize: 14 },
+  pendingSubtitle: { color: colors.warning, fontSize: 12, marginTop: 3 },
 });
 

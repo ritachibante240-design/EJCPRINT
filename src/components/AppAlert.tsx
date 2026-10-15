@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { colors, fontWeights, spacing } from '../theme';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppToastProvider, showAppToast } from './AppToast';
 
@@ -33,4 +34,4 @@ export function AppAlertProvider({ children }: { children: React.ReactNode }) {
 
 export function useAppAlert() { const context = useContext(Context); if (!context) throw new Error('useAppAlert deve ser usado dentro de AppAlertProvider.'); return context; }
 
-const styles = StyleSheet.create({ overlay: { flex: 1, backgroundColor: 'rgba(16,42,67,0.52)', alignItems: 'center', justifyContent: 'center', padding: 24 }, card: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 22, padding: 22, shadowColor: '#102A43', shadowOpacity: 0.2, shadowRadius: 18, elevation: 8 }, title: { color: '#102A43', fontSize: 21, fontWeight: '800' }, message: { color: '#627D98', fontSize: 15, lineHeight: 22, marginTop: 10 }, actions: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 8, marginTop: 22 }, button: { backgroundColor: '#102A43', borderRadius: 11, paddingHorizontal: 16, paddingVertical: 11 }, cancelButton: { backgroundColor: '#F0F4F8' }, buttonText: { color: '#FFFFFF', fontWeight: '700' }, cancelText: { color: '#486581' } });
+const styles = StyleSheet.create({ overlay: { flex: 1, backgroundColor: 'rgba(16,42,67,0.52)', alignItems: 'center', justifyContent: 'center', padding: spacing.xxl }, card: { width: '100%', backgroundColor: colors.surface, borderRadius: 22, padding: 22, shadowColor: colors.brand, shadowOpacity: 0.2, shadowRadius: 18, elevation: 8 }, title: { color: colors.brand, fontSize: 21, fontWeight: fontWeights.extraBold }, message: { color: colors.muted, fontSize: 15, lineHeight: 22, marginTop: 10 }, actions: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: spacing.sm, marginTop: 22 }, button: { backgroundColor: colors.brand, borderRadius: 11, paddingHorizontal: spacing.lg, paddingVertical: 11 }, cancelButton: { backgroundColor: colors.brandSoft }, buttonText: { color: colors.surface, fontWeight: fontWeights.bold }, cancelText: { color: '#486581' } });

@@ -1,4 +1,5 @@
 import React from 'react';
+import { colors, fontWeights, radii, spacing } from '../../theme';
 import { Image, ScrollView, View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsiveContent } from '../../hooks/useResponsive';
@@ -19,38 +20,38 @@ export default function InicioScreen({ navigation }: any) {
           <Pressable onLongPress={() => navigation.navigate('LoginAdministrador')}><Image source={require('../../../assets/ejc-print-logo.png')} style={styles.logoImage} resizeMode="contain" /></Pressable>
           <Text style={styles.subtitle}>Impressão e serviços</Text>
         </View>
-        <Ionicons name="print-outline" size={30} color="#102A43" />
+        <Ionicons name="print-outline" size={30} color={colors.brand} />
       </View>
       <Text style={styles.kicker}>ATENDIMENTO EJC PRINT</Text>
       <Text style={styles.welcome}>Como podemos ajudar?</Text>
       <Text style={styles.description}>Envie o seu pedido de impressão de forma simples e rápida.</Text>
       <View style={styles.card}>
         <View style={styles.cardHeading}>
-          <View style={styles.iconBox}><Ionicons name="document-text-outline" size={25} color="#102A43" /></View>
+          <View style={styles.iconBox}><Ionicons name="document-text-outline" size={25} color={colors.brand} /></View>
           <View style={styles.cardHeadingText}><Text style={styles.cardTitle}>Novo pedido</Text><Text style={styles.cardMeta}>Impressão e serviços</Text></View>
         </View>
         <Text style={styles.cardDescription}>Envie o documento, escolha o serviço e receba o valor estimado.</Text>
         <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('NovoPedido')}>
-          <Text style={styles.primaryText}>Fazer pedido</Text><Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
+          <Text style={styles.primaryText}>Fazer pedido</Text><Ionicons name="arrow-forward" size={19} color={colors.surface} />
         </Pressable>
       </View>
       <View style={styles.highlights}>
-        <View style={styles.highlight}><Ionicons name="flash-outline" size={21} color="#147D64" /><Text style={styles.highlightTitle}>Rápido</Text><Text style={styles.highlightText}>Atendimento</Text></View>
-        <View style={styles.highlight}><Ionicons name="checkmark-circle-outline" size={21} color="#147D64" /><Text style={styles.highlightTitle}>Qualidade</Text><Text style={styles.highlightText}>Garantida</Text></View>
-        <View style={styles.highlight}><Ionicons name="pricetag-outline" size={21} color="#147D64" /><Text style={styles.highlightTitle}>Preços</Text><Text style={styles.highlightText}>Acessíveis</Text></View>
+        <View style={styles.highlight}><Ionicons name="flash-outline" size={21} color={colors.success} /><Text style={styles.highlightTitle}>Rápido</Text><Text style={styles.highlightText}>Atendimento</Text></View>
+        <View style={styles.highlight}><Ionicons name="checkmark-circle-outline" size={21} color={colors.success} /><Text style={styles.highlightTitle}>Qualidade</Text><Text style={styles.highlightText}>Garantida</Text></View>
+        <View style={styles.highlight}><Ionicons name="pricetag-outline" size={21} color={colors.success} /><Text style={styles.highlightTitle}>Preços</Text><Text style={styles.highlightText}>Acessíveis</Text></View>
       </View>
       </ScrollView>
-      <View style={[styles.bottomBar, { height: 72 + insets.bottom, paddingBottom: 8 + insets.bottom }, isDesktop && { maxWidth: 680, width: '100%', alignSelf: 'center', borderRadius: 16, marginBottom: 14, borderWidth: 1, borderColor: '#E6EAF0' }]}>
+      <View style={[styles.bottomBar, { height: 72 + insets.bottom, paddingBottom: 8 + insets.bottom }, isDesktop && { maxWidth: 680, width: '100%', alignSelf: 'center', borderRadius: radii.lg, marginBottom: 14, borderWidth: 1, borderColor: colors.border }]}>
         <Pressable style={styles.bottomItem} onPress={() => navigation.navigate('Acesso')}>
-          <Ionicons name="home" size={23} color="#102A43" />
+          <Ionicons name="home" size={23} color={colors.brand} />
           <Text style={styles.bottomActive}>Início</Text>
         </Pressable>
         <Pressable style={styles.bottomItem} onPress={() => navigation.navigate('Servicos')}>
-          <Ionicons name="pricetag-outline" size={23} color="#829AB1" />
+          <Ionicons name="pricetag-outline" size={23} color={colors.subtle} />
           <Text style={styles.bottomText}>Serviços</Text>
         </Pressable>
         <Pressable style={styles.bottomItem} onPress={() => navigation.navigate('MeusPedidos')}>
-          <Ionicons name="receipt-outline" size={23} color="#829AB1" />
+          <Ionicons name="receipt-outline" size={23} color={colors.subtle} />
           <Text style={styles.bottomText}>Pedidos</Text>
         </Pressable>
       </View>
@@ -59,30 +60,30 @@ export default function InicioScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F5F7FA' },
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
-  content: { padding: 20, paddingTop: 22, paddingBottom: 100 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 20, marginBottom: 28, borderBottomWidth: 1, borderBottomColor: '#E6EAF0' },
+  screen: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.xl, paddingTop: 22, paddingBottom: 100 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: spacing.xl, marginBottom: spacing.xxxl, borderBottomWidth: 1, borderBottomColor: colors.border },
   logoImage: { height: 55, width: 158 },
-  subtitle: { fontSize: 15, color: '#829AB1', marginTop: 4 },
-  welcome: { fontSize: 32, fontWeight: 'bold', color: '#102A43' },
-  description: { fontSize: 16, color: '#829AB1', marginTop: 5, marginBottom: 20 },
-  kicker: { color: '#147D64', fontSize: 12, fontWeight: 'bold', letterSpacing: 1.1, marginBottom: 7 },
-  card: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 18, marginBottom: 14, borderWidth: 1, borderColor: '#F0F2F5' },
+  subtitle: { fontSize: 15, color: colors.subtle, marginTop: spacing.xs },
+  welcome: { fontSize: 32, fontWeight: fontWeights.bold, color: colors.brand },
+  description: { fontSize: 16, color: colors.subtle, marginTop: 5, marginBottom: spacing.xl },
+  kicker: { color: colors.success, fontSize: 12, fontWeight: fontWeights.bold, letterSpacing: 1.1, marginBottom: 7 },
+  card: { backgroundColor: colors.surface, padding: spacing.xl, borderRadius: radii.xl, marginBottom: 14, borderWidth: 1, borderColor: colors.border },
   cardHeading: { flexDirection: 'row', alignItems: 'center' },
-  iconBox: { width: 54, height: 54, borderRadius: 16, backgroundColor: '#F0F4F8', alignItems: 'center', justifyContent: 'center' },
+  iconBox: { width: 54, height: 54, borderRadius: radii.lg, backgroundColor: colors.brandSoft, alignItems: 'center', justifyContent: 'center' },
   cardHeadingText: { marginLeft: 14 },
-  cardTitle: { color: '#102A43', fontSize: 19, fontWeight: 'bold' },
-  cardMeta: { color: '#829AB1', fontSize: 14, marginTop: 4 },
-  cardDescription: { color: '#627D98', marginTop: 16, lineHeight: 21, fontSize: 15 },
-  primaryButton: { backgroundColor: '#102A43', borderRadius: 11, padding: 14, flexDirection: 'row', gap: 8, justifyContent: 'center', alignItems: 'center', marginTop: 18 },
-  primaryText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 },
-  highlights: { backgroundColor: '#FFFFFF', borderColor: '#E6EAF0', borderRadius: 16, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-around', marginTop: 4, paddingVertical: 17 },
+  cardTitle: { color: colors.brand, fontSize: 19, fontWeight: fontWeights.bold },
+  cardMeta: { color: colors.subtle, fontSize: 14, marginTop: spacing.xs },
+  cardDescription: { color: colors.muted, marginTop: spacing.lg, lineHeight: 21, fontSize: 15 },
+  primaryButton: { backgroundColor: colors.brand, borderRadius: 11, padding: 14, flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', alignItems: 'center', marginTop: 18 },
+  primaryText: { color: colors.surface, fontWeight: fontWeights.bold, fontSize: 15 },
+  highlights: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-around', marginTop: spacing.xs, paddingVertical: 17 },
   highlight: { alignItems: 'center', flex: 1 },
-  highlightTitle: { color: '#102A43', fontSize: 12, fontWeight: 'bold', marginTop: 7 },
-  highlightText: { color: '#829AB1', fontSize: 11, marginTop: 2 },
-  bottomBar: { height: 72, flexDirection: 'row', backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E6EAF0', paddingTop: 8, paddingBottom: 8 },
+  highlightTitle: { color: colors.brand, fontSize: 12, fontWeight: fontWeights.bold, marginTop: 7 },
+  highlightText: { color: colors.subtle, fontSize: 11, marginTop: 2 },
+  bottomBar: { height: 72, flexDirection: 'row', backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, paddingBottom: spacing.sm },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
-  bottomActive: { color: '#102A43', fontSize: 11, fontWeight: 'bold' },
-  bottomText: { color: '#829AB1', fontSize: 11, fontWeight: '600' },
+  bottomActive: { color: colors.brand, fontSize: 11, fontWeight: fontWeights.bold },
+  bottomText: { color: colors.subtle, fontSize: 11, fontWeight: fontWeights.semibold },
 });

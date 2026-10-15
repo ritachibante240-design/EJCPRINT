@@ -1,4 +1,5 @@
 import { showAppAlert } from "../../components/AppAlert";
+import { colors, fontWeights, radii, spacing } from '../../theme';
 import React, { Fragment, useMemo, useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
 import { Directory, File, Paths } from "expo-file-system";
@@ -331,7 +332,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                           : "print-outline"
                       }
                       size={25}
-                      color={ok ? "#FFF" : "#102A43"}
+                      color={ok ? "#FFF" : colors.brand}
                     />
                   </View>
                   <View style={styles.serviceInfo}>
@@ -341,7 +342,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                   <Ionicons
                     name={ok ? "checkmark-circle" : "ellipse-outline"}
                     size={25}
-                    color={ok ? "#147D64" : "#BCCCDC"}
+                    color={ok ? colors.success : colors.border}
                   />
                 </Pressable>
               );
@@ -362,7 +363,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
             <Text style={styles.pageSubtitle}>Documento, páginas e cópias</Text>
             {ehDigitalizacao && (
               <View style={styles.infoBox}>
-                <Ionicons name="scan-outline" size={23} color="#102A43" />
+                <Ionicons name="scan-outline" size={23} color={colors.brand} />
                 <Text style={styles.infoText}>
                   Informe quantas páginas pretende digitalizar.
                 </Text>
@@ -390,7 +391,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
             )}
             {ehFotocopia && (
               <View style={styles.infoBox}>
-                <Ionicons name="copy-outline" size={23} color="#102A43" />
+                <Ionicons name="copy-outline" size={23} color={colors.brand} />
                 <Text style={styles.infoText}>
                   Informe as páginas originais e o número de cópias.
                 </Text>
@@ -404,7 +405,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 <Ionicons
                   name={documento ? "document-text" : "cloud-upload-outline"}
                   size={28}
-                  color="#102A43"
+                  color={colors.brand}
                 />
                 <View style={styles.serviceInfo}>
                   <Text style={styles.serviceTitle}>
@@ -414,7 +415,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                     {documento ? "Toque para trocar" : "PDF ou documento"}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={21} color="#829AB1" />
+                <Ionicons name="chevron-forward" size={21} color={colors.subtle} />
               </Pressable>
             )}
             <Text style={styles.label}>Quantas páginas tem o documento?</Text>
@@ -433,7 +434,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                   setNumeroCopias(String(Math.max(1, Number(numeroCopias) - 1)))
                 }
               >
-                <Ionicons name="remove" size={23} color="#102A43" />
+                <Ionicons name="remove" size={23} color={colors.brand} />
               </Pressable>
               <Text style={styles.counterValue}>{numeroCopias}</Text>
               <Pressable
@@ -442,7 +443,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                   setNumeroCopias(String(Number(numeroCopias) + 1))
                 }
               >
-                <Ionicons name="add" size={23} color="#102A43" />
+                <Ionicons name="add" size={23} color={colors.brand} />
               </Pressable>
             </View>
             {!ehDigitalizacao && (
@@ -457,7 +458,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                   ]}
                   onPress={() => setFrenteVerso(false)}
                 >
-                  <Ionicons name="document-outline" size={22} color="#102A43" />
+                  <Ionicons name="document-outline" size={22} color={colors.brand} />
                   <Text>Frente única</Text>
                 </Pressable>
                 <Pressable
@@ -467,7 +468,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                   ]}
                   onPress={() => setFrenteVerso(true)}
                 >
-                  <Ionicons name="copy-outline" size={22} color="#102A43" />
+                  <Ionicons name="copy-outline" size={22} color={colors.brand} />
                   <Text>Frente e verso</Text>
                 </Pressable>
               </View>
@@ -630,10 +631,10 @@ export default function NovoPedidoScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F7FA" },
-  content: { padding: 20, paddingBottom: 50 },
-  title: { fontSize: 28, fontWeight: "bold", color: "#102A43" },
-  subtitle: { color: "#627D98", marginTop: 5, marginBottom: 25 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.xl, paddingBottom: 50 },
+  title: { fontSize: 28, fontWeight: fontWeights.bold, color: colors.brand },
+  subtitle: { color: colors.muted, marginTop: 5, marginBottom: 25 },
   progressContainer: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -644,24 +645,24 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: "#E6EAF0",
+    backgroundColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  progressCircleActive: { backgroundColor: "#102A43" },
-  progressNumber: { color: "#829AB1", fontWeight: "bold" },
+  progressCircleActive: { backgroundColor: colors.brand },
+  progressNumber: { color: colors.subtle, fontWeight: fontWeights.bold },
   progressNumberActive: { color: "#FFF" },
-  progressLabel: { color: "#627D98", fontSize: 11, marginTop: 6 },
+  progressLabel: { color: colors.muted, fontSize: 11, marginTop: 6 },
   progressLine: {
     flex: 1,
     height: 2,
-    backgroundColor: "#E6EAF0",
-    marginTop: 16,
+    backgroundColor: colors.border,
+    marginTop: spacing.lg,
   },
-  progressLineActive: { backgroundColor: "#102A43" },
-  pageTitle: { color: "#102A43", fontSize: 26, fontWeight: "bold" },
+  progressLineActive: { backgroundColor: colors.brand },
+  pageTitle: { color: colors.brand, fontSize: 26, fontWeight: fontWeights.bold },
   pageSubtitle: {
-    color: "#627D98",
+    color: colors.muted,
     fontSize: 15,
     marginTop: 5,
     marginBottom: 22,
@@ -669,38 +670,38 @@ const styles = StyleSheet.create({
   serviceCard: {
     backgroundColor: "#FFF",
     borderWidth: 1,
-    borderColor: "#E6EAF0",
+    borderColor: colors.border,
     borderRadius: 15,
     padding: 15,
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
   },
-  selectedCard: { borderColor: "#102A43", borderWidth: 2 },
+  selectedCard: { borderColor: colors.brand, borderWidth: 2 },
   serviceIcon: {
     width: 47,
     height: 47,
     borderRadius: 13,
-    backgroundColor: "#F0F4F8",
+    backgroundColor: colors.brandSoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  selectedIcon: { backgroundColor: "#102A43" },
-  serviceInfo: { flex: 1, marginLeft: 12 },
-  serviceTitle: { color: "#102A43", fontWeight: "bold" },
-  servicePrice: { color: "#627D98", marginTop: 3 },
+  selectedIcon: { backgroundColor: colors.brand },
+  serviceInfo: { flex: 1, marginLeft: spacing.md },
+  serviceTitle: { color: colors.brand, fontWeight: fontWeights.bold },
+  servicePrice: { color: colors.muted, marginTop: 3 },
   primary: {
-    backgroundColor: "#102A43",
+    backgroundColor: colors.brand,
     minHeight: 55,
     borderRadius: 13,
-    marginTop: 16,
+    marginTop: spacing.lg,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: spacing.sm,
   },
   disabled: { opacity: 0.4 },
-  primaryText: { color: "#FFF", fontWeight: "bold", fontSize: 16 },
+  primaryText: { color: "#FFF", fontWeight: fontWeights.bold, fontSize: 16 },
   documentCard: {
     backgroundColor: "#FFF",
     borderRadius: 15,
@@ -710,96 +711,96 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
   label: {
-    color: "#243B53",
-    fontWeight: "600",
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
     marginTop: 15,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   input: {
     backgroundColor: "#FFF",
     borderWidth: 1,
-    borderColor: "#D9E2EC",
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radii.md,
     minHeight: 53,
     paddingHorizontal: 15,
     marginBottom: 10,
   },
-  textArea: { minHeight: 110, paddingTop: 12 },
-  helperText: { color: "#627D98", fontSize: 13, lineHeight: 19, marginBottom: 9 },
-  characterCount: { color: "#829AB1", fontSize: 12, textAlign: "right", marginTop: -8, marginBottom: 12 },
+  textArea: { minHeight: 110, paddingTop: spacing.md },
+  helperText: { color: colors.muted, fontSize: 13, lineHeight: 19, marginBottom: 9 },
+  characterCount: { color: colors.subtle, fontSize: 12, textAlign: "right", marginTop: -8, marginBottom: spacing.md },
   counter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#FFF",
     borderRadius: 13,
-    padding: 8,
+    padding: spacing.sm,
   },
   counterButton: {
     width: 45,
     height: 45,
     borderRadius: 11,
-    backgroundColor: "#F0F4F8",
+    backgroundColor: colors.brandSoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  counterValue: { color: "#102A43", fontSize: 22, fontWeight: "bold" },
+  counterValue: { color: colors.brand, fontSize: 22, fontWeight: fontWeights.bold },
   typeRow: { flexDirection: "row", gap: 10 },
   typeButton: {
     flex: 1,
     backgroundColor: "#FFF",
     borderWidth: 1,
-    borderColor: "#D9E2EC",
+    borderColor: colors.border,
     borderRadius: 13,
     padding: 15,
     alignItems: "center",
     gap: 6,
   },
   typeSelected: {
-    borderColor: "#102A43",
+    borderColor: colors.brand,
     borderWidth: 2,
-    backgroundColor: "#F0F4F8",
+    backgroundColor: colors.brandSoft,
   },
   navRow: { flexDirection: "row", gap: 10, marginTop: 25 },
   back: {
     flex: 1,
     minHeight: 53,
-    borderRadius: 12,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: "#BCCCDC",
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   next: {
     flex: 2,
     minHeight: 53,
-    backgroundColor: "#102A43",
-    borderRadius: 12,
+    backgroundColor: colors.brand,
+    borderRadius: radii.md,
     alignItems: "center",
     justifyContent: "center",
   },
   summary: {
     backgroundColor: "#FFF",
-    borderRadius: 18,
+    borderRadius: radii.xl,
     padding: 18,
     marginBottom: 25,
   },
-  summaryLine: { color: "#243B53", marginTop: 12 },
+  summaryLine: { color: colors.text, marginTop: spacing.md },
   instructionsSummary: { color: "#334E68", fontSize: 14, lineHeight: 20, marginTop: 5 },
   bindingQuoteText: { flex: 1, color: "#9C4221", lineHeight: 20 },
-  separator: { height: 1, backgroundColor: "#E6EAF0", marginVertical: 12 },
-  totalLabel: { color: "#627D98" },
-  total: { color: "#102A43", fontSize: 30, fontWeight: "bold", marginTop: 3 },
+  separator: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  totalLabel: { color: colors.muted },
+  total: { color: colors.brand, fontSize: 30, fontWeight: fontWeights.bold, marginTop: 3 },
   sectionTitle: {
-    color: "#102A43",
+    color: colors.brand,
     fontSize: 19,
-    fontWeight: "bold",
-    marginBottom: 12,
+    fontWeight: fontWeights.bold,
+    marginBottom: spacing.md,
   },
   infoBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F0F4F8",
+    backgroundColor: colors.brandSoft,
     borderRadius: 13,
     padding: 14,
     gap: 10,

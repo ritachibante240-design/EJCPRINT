@@ -1,4 +1,5 @@
 import { formatarDinheiro } from '../../utils/formatters';
+import { colors, fontWeights, radii, spacing } from '../../theme';
 import { showAppAlert } from '../../components/AppAlert';
 import ActionButton from '../../components/ActionButton';
 import React, { useCallback, useState } from 'react';
@@ -538,7 +539,7 @@ export default function StockScreen() {
     return (
       <View style={styles.materialCard}>
         <View style={styles.materialHeader}>
-          <View style={styles.materialIcon}><Ionicons name="cube-outline" size={24} color="#102A43" /></View>
+          <View style={styles.materialIcon}><Ionicons name="cube-outline" size={24} color={colors.brand} /></View>
           <View style={styles.materialInfo}><Text style={styles.materialName}>{item.nome}</Text><Text style={styles.materialCategory}>{item.categoria}</Text></View>
           {stockBaixo && <View style={styles.lowBadge}><Text style={styles.lowBadgeText}>Repor</Text></View>}
         </View>
@@ -547,10 +548,10 @@ export default function StockScreen() {
         <View style={styles.divider} />
         <View style={styles.detailRow}><Text style={styles.detailLabel}>Repor quando chegar a</Text><Text style={styles.detailValue}>{item.stock_minimo} {item.unidade}</Text></View>
         <View style={styles.detailRow}><Text style={styles.detailLabel}>Custo médio</Text><Text style={styles.detailValue}>{item.custo_medio > 0 ? `${item.custo_medio.toFixed(4)} MT/${item.unidade}` : 'Ainda não definido'}</Text></View>
-        {item.custo_medio <= 0 && <Pressable style={styles.initialCostButton} onPress={() => { setItemSelecionado(item); setValorCustoInicial(''); setModalCustoInicial(true); }}><Ionicons name="calculator-outline" size={18} color="#102A43" /><Text style={styles.initialCostText}>Definir custo inicial</Text></Pressable>}
+        {item.custo_medio <= 0 && <Pressable style={styles.initialCostButton} onPress={() => { setItemSelecionado(item); setValorCustoInicial(''); setModalCustoInicial(true); }}><Ionicons name="calculator-outline" size={18} color={colors.brand} /><Text style={styles.initialCostText}>Definir custo inicial</Text></Pressable>}
         <View style={styles.materialActions}>
-          <Pressable style={styles.buyButton} onPress={() => { setItemSelecionado(item); setQuantidadeCompra(''); setValorCompra(''); setModalCompra(true); }}><Ionicons name="cart-outline" size={19} color="#FFFFFF" /><Text style={styles.buyButtonText}>Comprar</Text></Pressable>
-          <Pressable style={styles.moreButton} onPress={() => { setItemSelecionado(item); showAppAlert(item.nome, 'Escolha uma opção', [{ text: 'Registar desperdício', onPress: () => { setQuantidadeDesperdicio(''); setMotivoDesperdicio(''); setModalDesperdicio(true); } }, { text: 'Corrigir quantidade', onPress: () => { setQuantidadeReal(String(item.quantidade)); setModalAjuste(true); } }, { text: 'Ver histórico', onPress: () => showAppAlert('Histórico', 'Os movimentos deste material são guardados automaticamente.') }, { text: 'Cancelar', style: 'cancel' }]); }}><Ionicons name="ellipsis-horizontal" size={20} color="#102A43" /><Text style={styles.moreButtonText}>Mais</Text></Pressable>
+          <Pressable style={styles.buyButton} onPress={() => { setItemSelecionado(item); setQuantidadeCompra(''); setValorCompra(''); setModalCompra(true); }}><Ionicons name="cart-outline" size={19} color={colors.surface} /><Text style={styles.buyButtonText}>Comprar</Text></Pressable>
+          <Pressable style={styles.moreButton} onPress={() => { setItemSelecionado(item); showAppAlert(item.nome, 'Escolha uma opção', [{ text: 'Registar desperdício', onPress: () => { setQuantidadeDesperdicio(''); setMotivoDesperdicio(''); setModalDesperdicio(true); } }, { text: 'Corrigir quantidade', onPress: () => { setQuantidadeReal(String(item.quantidade)); setModalAjuste(true); } }, { text: 'Ver histórico', onPress: () => showAppAlert('Histórico', 'Os movimentos deste material são guardados automaticamente.') }, { text: 'Cancelar', style: 'cancel' }]); }}><Ionicons name="ellipsis-horizontal" size={20} color={colors.brand} /><Text style={styles.moreButtonText}>Mais</Text></Pressable>
         </View>
       </View>
     );
@@ -593,7 +594,7 @@ export default function StockScreen() {
               Selecione um material para registar movimentos. Folhas são contadas em unidades inteiras.
             </Text>
             <Pressable style={styles.calculatorButton} onPress={() => setModalCalculadora(true)}>
-              <Ionicons name="calculator-outline" size={19} color="#102A43" />
+              <Ionicons name="calculator-outline" size={19} color={colors.brand} />
               <Text style={styles.calculatorButtonText}>Calculadora de custos de impressão</Text>
             </Pressable>
           </>
@@ -904,7 +905,7 @@ export default function StockScreen() {
       <Modal visible={modalCompra} transparent animationType="slide" onRequestClose={() => setModalCompra(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}><View><Text style={styles.modalTitle}>Comprar material</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text></View><Pressable onPress={() => setModalCompra(false)}><Ionicons name="close" size={28} color="#102A43" /></Pressable></View>
+            <View style={styles.modalHeader}><View><Text style={styles.modalTitle}>Comprar material</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text></View><Pressable onPress={() => setModalCompra(false)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable></View>
             <Text style={styles.inputLabel}>Quantidade comprada</Text>
             <TextInput style={styles.input} keyboardType="decimal-pad" placeholder={`Ex.: 500 ${itemSelecionado?.unidade ?? ''}`} value={quantidadeCompra} onChangeText={setQuantidadeCompra} />
             <Text style={styles.inputLabel}>Quanto pagou?</Text>
@@ -918,11 +919,11 @@ export default function StockScreen() {
       <Modal visible={modalCustoInicial} transparent animationType="slide" onRequestClose={() => setModalCustoInicial(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}><View><Text style={styles.modalTitle}>Definir custo inicial</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome} · {itemSelecionado?.quantidade} {itemSelecionado?.unidade}</Text></View><Pressable onPress={() => setModalCustoInicial(false)}><Ionicons name="close" size={28} color="#102A43" /></Pressable></View>
+            <View style={styles.modalHeader}><View><Text style={styles.modalTitle}>Definir custo inicial</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome} · {itemSelecionado?.quantidade} {itemSelecionado?.unidade}</Text></View><Pressable onPress={() => setModalCustoInicial(false)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable></View>
             <Text style={styles.inputLabel}>Valor total do stock existente</Text>
             <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Ex.: 323,40 MT" value={valorCustoInicial} onChangeText={setValorCustoInicial} />
             <Text style={styles.initialCostHint}>Este valor apenas define o custo médio. Não adiciona quantidade, despesa ou movimento no Caixa.</Text>
-            <Pressable style={styles.confirmButton} onPress={confirmarCustoInicial}><Ionicons name="checkmark-circle-outline" size={21} color="#FFFFFF" /><Text style={styles.confirmButtonText}>Guardar custo inicial</Text></Pressable>
+            <Pressable style={styles.confirmButton} onPress={confirmarCustoInicial}><Ionicons name="checkmark-circle-outline" size={21} color={colors.surface} /><Text style={styles.confirmButtonText}>Guardar custo inicial</Text></Pressable>
           </View>
         </View>
       </Modal>
@@ -932,7 +933,7 @@ export default function StockScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <View><Text style={styles.modalTitle}>Calculadora de custos</Text><Text style={styles.modalSubtitle}>Estimativa para próximas impressões</Text></View>
-              <Pressable onPress={() => setModalCalculadora(false)}><Ionicons name="close" size={28} color="#102A43" /></Pressable>
+              <Pressable onPress={() => setModalCalculadora(false)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable>
             </View>
             <View style={styles.calculationBox}>
               <Text style={styles.calculationLabel}>Valores de referência</Text>
@@ -976,11 +977,11 @@ export default function StockScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: colors.background,
   },
 
   content: {
-    padding: 20,
+    padding: spacing.xl,
     paddingBottom: 40,
   },
 
@@ -992,39 +993,39 @@ const styles = StyleSheet.create({
 
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#102A43',
+    fontWeight: fontWeights.bold,
+    color: colors.brand,
   },
 
   subtitle: {
-    color: '#829AB1',
+    color: colors.subtle,
     marginTop: 3,
   },
 
   addButton: {
-    backgroundColor: '#102A43',
-    paddingHorizontal: 16,
+    backgroundColor: colors.brand,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 11,
-    borderRadius: 10,
+    borderRadius: radii.sm,
   },
 
   addButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    color: colors.surface,
+    fontWeight: fontWeights.bold,
   },
 
   instruction: {
-    color: '#627D98',
-    marginVertical: 20,
+    color: colors.muted,
+    marginVertical: spacing.xl,
   },
-  calculatorButton: { minHeight: 48, borderRadius: 11, borderWidth: 1, borderColor: '#BCCCDC', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 18 },
-  calculatorButtonText: { color: '#102A43', fontWeight: '700' },
+  calculatorButton: { minHeight: 48, borderRadius: 11, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: 18 },
+  calculatorButtonText: { color: colors.brand, fontWeight: fontWeights.bold },
 
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     padding: 18,
-    borderRadius: 16,
-    marginBottom: 12,
+    borderRadius: radii.lg,
+    marginBottom: spacing.md,
   },
 
   cardHeader: {
@@ -1040,24 +1041,24 @@ const styles = StyleSheet.create({
   },
 
   itemName: {
-    color: '#102A43',
+    color: colors.brand,
     fontSize: 17,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
   },
 
   category: {
-    color: '#829AB1',
+    color: colors.subtle,
     marginTop: 3,
   },
 
   quantity: {
     fontSize: 26,
-    fontWeight: 'bold',
-    color: '#147D64',
+    fontWeight: fontWeights.bold,
+    color: colors.success,
   },
 
   unitBadge: {
-    backgroundColor: '#EAF0F6',
+    backgroundColor: colors.brandSoft,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
@@ -1066,48 +1067,48 @@ const styles = StyleSheet.create({
   unitText: {
     color: '#486581',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: fontWeights.semibold,
   },
 
   lowQuantity: {
-    color: '#C53030',
+    color: colors.danger,
   },
 
   minimumRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
 
   minimumLabel: {
-    color: '#829AB1',
+    color: colors.subtle,
     fontSize: 12,
   },
 
   minimum: {
-    color: '#627D98',
+    color: colors.muted,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: fontWeights.semibold,
   },
 
   cost: {
-    color: '#627D98',
+    color: colors.muted,
     fontSize: 12,
     marginTop: 5,
   },
 
   warning: {
-    backgroundColor: '#FFF5F5',
+    backgroundColor: colors.dangerSoft,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
+    borderRadius: radii.xxl,
   },
 
   warningText: {
-    color: '#C53030',
+    color: colors.danger,
     fontSize: 11,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
   },
 
   empty: {
@@ -1120,28 +1121,28 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    color: '#102A43',
+    color: colors.brand,
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
     marginTop: 10,
   },
 
   emptyText: {
-    color: '#829AB1',
-    marginTop: 4,
+    color: colors.subtle,
+    marginTop: spacing.xs,
   },
 
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xxl,
   },
 
   modal: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 20,
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.xl,
   },
 
   formModal: {
@@ -1153,35 +1154,35 @@ const styles = StyleSheet.create({
   },
 
   modalTitle: {
-    color: '#102A43',
+    color: colors.brand,
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
     marginBottom: 15,
   },
 
   currentStock: {
-    color: '#627D98',
+    color: colors.muted,
     marginBottom: 15,
   },
 
   modalLabel: {
-    color: '#243B53',
-    fontWeight: '600',
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
     marginBottom: 7,
   },
 
   input: {
     borderWidth: 1,
-    borderColor: '#D9E2EC',
+    borderColor: colors.border,
     borderRadius: 11,
     padding: 14,
     marginBottom: 10,
   },
 
   formLabel: {
-    color: '#243B53',
-    fontWeight: '600',
-    marginTop: 8,
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
+    marginTop: spacing.sm,
     marginBottom: 7,
   },
 
@@ -1189,20 +1190,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 7,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
 
   choiceButton: {
     borderWidth: 1,
-    borderColor: '#BCCCDC',
+    borderColor: colors.border,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderRadius: 9,
   },
 
   choiceSelected: {
-    backgroundColor: '#102A43',
-    borderColor: '#102A43',
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
   },
 
   choiceText: {
@@ -1211,12 +1212,12 @@ const styles = StyleSheet.create({
   },
 
   choiceTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    color: colors.surface,
+    fontWeight: fontWeights.bold,
   },
 
   primaryButton: {
-    backgroundColor: '#102A43',
+    backgroundColor: colors.brand,
     padding: 15,
     borderRadius: 11,
     alignItems: 'center',
@@ -1224,7 +1225,7 @@ const styles = StyleSheet.create({
   },
 
   entryButton: {
-    backgroundColor: '#147D64',
+    backgroundColor: colors.success,
     padding: 15,
     borderRadius: 11,
     alignItems: 'center',
@@ -1232,7 +1233,7 @@ const styles = StyleSheet.create({
   },
 
   exitButton: {
-    backgroundColor: '#C53030',
+    backgroundColor: colors.danger,
     padding: 15,
     borderRadius: 11,
     alignItems: 'center',
@@ -1240,7 +1241,7 @@ const styles = StyleSheet.create({
   },
 
   lossButton: {
-    backgroundColor: '#B7791F',
+    backgroundColor: colors.warning,
     padding: 15,
     borderRadius: 11,
     alignItems: 'center',
@@ -1248,86 +1249,86 @@ const styles = StyleSheet.create({
   },
 
   lossHistory: {
-    marginTop: 20,
+    marginTop: spacing.xl,
   },
 
   lossHistoryTitle: {
-    color: '#102A43',
+    color: colors.brand,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: fontWeights.bold,
     marginBottom: 10,
   },
 
   lossCard: {
-    backgroundColor: '#FFF9EB',
+    backgroundColor: colors.warningSoft,
     padding: 14,
-    borderRadius: 12,
-    marginBottom: 8,
+    borderRadius: radii.md,
+    marginBottom: spacing.sm,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
 
   lossMaterial: {
-    color: '#243B53',
-    fontWeight: '600',
+    color: colors.text,
+    fontWeight: fontWeights.semibold,
   },
 
   lossDetail: {
-    color: '#829AB1',
+    color: colors.subtle,
     fontSize: 12,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
 
   lossQuantity: {
-    color: '#B7791F',
-    fontWeight: 'bold',
+    color: colors.warning,
+    fontWeight: fontWeights.bold,
   },
 
   primaryText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    color: colors.surface,
+    fontWeight: fontWeights.bold,
   },
 
   cancel: {
     textAlign: 'center',
-    color: '#627D98',
+    color: colors.muted,
     marginTop: 18,
   },
 
-  materialCard: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 18, marginBottom: 14 },
+  materialCard: { backgroundColor: colors.surface, borderRadius: radii.xl, padding: 18, marginBottom: 14 },
   materialHeader: { flexDirection: 'row', alignItems: 'center' },
-  materialIcon: { width: 46, height: 46, borderRadius: 13, backgroundColor: '#F0F4F8', alignItems: 'center', justifyContent: 'center' },
-  materialInfo: { flex: 1, marginLeft: 12 },
-  materialName: { color: '#102A43', fontSize: 18, fontWeight: 'bold' },
-  materialCategory: { color: '#829AB1', marginTop: 2 },
-  lowBadge: { backgroundColor: '#FFF3C4', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  lowBadgeText: { color: '#B7791F', fontSize: 12, fontWeight: 'bold' },
-  stockArea: { flexDirection: 'row', alignItems: 'baseline', marginTop: 20 },
-  stockNumber: { color: '#147D64', fontSize: 34, fontWeight: 'bold' },
-  stockUnit: { color: '#627D98', fontSize: 16, marginLeft: 7 },
-  availableText: { color: '#829AB1', marginTop: 2 },
-  divider: { height: 1, backgroundColor: '#E6EAF0', marginVertical: 16 },
+  materialIcon: { width: 46, height: 46, borderRadius: 13, backgroundColor: colors.brandSoft, alignItems: 'center', justifyContent: 'center' },
+  materialInfo: { flex: 1, marginLeft: spacing.md },
+  materialName: { color: colors.brand, fontSize: 18, fontWeight: fontWeights.bold },
+  materialCategory: { color: colors.subtle, marginTop: 2 },
+  lowBadge: { backgroundColor: colors.warningSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.xxl },
+  lowBadgeText: { color: colors.warning, fontSize: 12, fontWeight: fontWeights.bold },
+  stockArea: { flexDirection: 'row', alignItems: 'baseline', marginTop: spacing.xl },
+  stockNumber: { color: colors.success, fontSize: 34, fontWeight: fontWeights.bold },
+  stockUnit: { color: colors.muted, fontSize: 16, marginLeft: 7 },
+  availableText: { color: colors.subtle, marginTop: 2 },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 9 },
-  detailLabel: { color: '#829AB1' },
-  detailValue: { color: '#334E68', fontWeight: '600' },
+  detailLabel: { color: colors.subtle },
+  detailValue: { color: '#334E68', fontWeight: fontWeights.semibold },
   materialActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  buyButton: { flex: 1, backgroundColor: '#102A43', minHeight: 48, borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7 },
-  buyButtonText: { color: '#FFFFFF', fontWeight: 'bold' },
-  moreButton: { paddingHorizontal: 20, minHeight: 48, borderWidth: 1, borderColor: '#BCCCDC', borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5 },
-  moreButtonText: { color: '#102A43', fontWeight: 'bold' },
+  buyButton: { flex: 1, backgroundColor: colors.brand, minHeight: 48, borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7 },
+  buyButtonText: { color: colors.surface, fontWeight: fontWeights.bold },
+  moreButton: { paddingHorizontal: spacing.xl, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5 },
+  moreButtonText: { color: colors.brand, fontWeight: fontWeights.bold },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(16,42,67,0.35)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFFFFF', padding: 22, paddingBottom: 35, borderTopLeftRadius: 25, borderTopRightRadius: 25 },
+  modalContent: { backgroundColor: colors.surface, padding: 22, paddingBottom: 35, borderTopLeftRadius: 25, borderTopRightRadius: 25 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 25 },
-  modalSubtitle: { color: '#627D98', marginTop: 4 },
-  inputLabel: { color: '#243B53', fontWeight: '600', marginBottom: 7, marginTop: 10 },
-  calculationBox: { backgroundColor: '#F0F4F8', borderRadius: 12, padding: 14, marginTop: 15 },
-  calculationLabel: { color: '#627D98', fontSize: 12 },
-  calculationValue: { color: '#102A43', fontSize: 18, fontWeight: 'bold', marginTop: 3 },
+  modalSubtitle: { color: colors.muted, marginTop: spacing.xs },
+  inputLabel: { color: colors.text, fontWeight: fontWeights.semibold, marginBottom: 7, marginTop: 10 },
+  calculationBox: { backgroundColor: colors.brandSoft, borderRadius: radii.md, padding: 14, marginTop: 15 },
+  calculationLabel: { color: colors.muted, fontSize: 12 },
+  calculationValue: { color: colors.brand, fontSize: 18, fontWeight: fontWeights.bold, marginTop: 3 },
   calculatorDetail: { color: '#334E68', marginTop: 7 },
-  confirmButton: { backgroundColor: '#102A43', minHeight: 55, borderRadius: 12, marginTop: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
-  confirmButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
-  initialCostButton: { minHeight: 44, borderWidth: 1, borderColor: '#BCCCDC', borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 6 },
-  initialCostText: { color: '#102A43', fontWeight: 'bold' },
-  initialCostHint: { color: '#627D98', fontSize: 12, lineHeight: 18, marginTop: 12 },
+  confirmButton: { backgroundColor: colors.brand, minHeight: 55, borderRadius: radii.md, marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  confirmButtonText: { color: colors.surface, fontSize: 16, fontWeight: fontWeights.bold },
+  initialCostButton: { minHeight: 44, borderWidth: 1, borderColor: colors.border, borderRadius: radii.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 6 },
+  initialCostText: { color: colors.brand, fontWeight: fontWeights.bold },
+  initialCostHint: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: spacing.md },
 });

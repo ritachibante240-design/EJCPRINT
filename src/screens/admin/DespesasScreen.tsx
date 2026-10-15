@@ -1,4 +1,5 @@
 import { showAppAlert } from '../../components/AppAlert';
+import { colors, fontWeights, radii, spacing } from '../../theme';
 import React, { useCallback, useState } from 'react';
 import {
 	View,
@@ -276,61 +277,61 @@ export default function DespesasScreen() {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#F5F7FA',
+		backgroundColor: colors.background,
 	},
 
 	content: {
-		padding: 20,
+		padding: spacing.xl,
 		paddingBottom: 40,
 	},
 
 	title: {
 		fontSize: 28,
-		fontWeight: 'bold',
-		color: '#102A43',
+		fontWeight: fontWeights.bold,
+		color: colors.brand,
 	},
 
 	subtitle: {
-		color: '#829AB1',
-		marginTop: 4,
-		marginBottom: 20,
+		color: colors.subtle,
+		marginTop: spacing.xs,
+		marginBottom: spacing.xl,
 	},
 
 	totalCard: {
-		backgroundColor: '#102A43',
-		padding: 20,
-		borderRadius: 16,
-		marginBottom: 20,
+		backgroundColor: colors.brand,
+		padding: spacing.xl,
+		borderRadius: radii.lg,
+		marginBottom: spacing.xl,
 	},
 
 	totalLabel: {
-		color: '#BCCCDC',
+		color: colors.border,
 	},
 
 	total: {
-		color: '#FFFFFF',
+		color: colors.surface,
 		fontSize: 30,
-		fontWeight: 'bold',
+		fontWeight: fontWeights.bold,
 		marginTop: 5,
 	},
 
 	form: {
-		backgroundColor: '#FFFFFF',
+		backgroundColor: colors.surface,
 		padding: 18,
-		borderRadius: 16,
+		borderRadius: radii.lg,
 	},
 
 	label: {
-		color: '#243B53',
-		fontWeight: '600',
-		marginBottom: 8,
+		color: colors.text,
+		fontWeight: fontWeights.semibold,
+		marginBottom: spacing.sm,
 		marginTop: 10,
 	},
 
 	input: {
 		borderWidth: 1,
-		borderColor: '#D9E2EC',
-		borderRadius: 12,
+		borderColor: colors.border,
+		borderRadius: radii.md,
 		padding: 14,
 		fontSize: 16,
 	},
@@ -338,20 +339,20 @@ const styles = StyleSheet.create({
 	categories: {
 		flexDirection: 'row',
 		flexWrap: 'wrap',
-		gap: 8,
+		gap: spacing.sm,
 	},
 
 	category: {
 		borderWidth: 1,
-		borderColor: '#BCCCDC',
-		paddingHorizontal: 12,
-		paddingVertical: 8,
-		borderRadius: 20,
+		borderColor: colors.border,
+		paddingHorizontal: spacing.md,
+		paddingVertical: spacing.sm,
+		borderRadius: radii.xxl,
 	},
 
 	categorySelected: {
-		backgroundColor: '#102A43',
-		borderColor: '#102A43',
+		backgroundColor: colors.brand,
+		borderColor: colors.brand,
 	},
 
 	categoryText: {
@@ -359,33 +360,33 @@ const styles = StyleSheet.create({
 	},
 
 	categoryTextSelected: {
-		color: '#FFFFFF',
+		color: colors.surface,
 	},
 
 	button: {
-		backgroundColor: '#102A43',
-		padding: 16,
-		borderRadius: 12,
+		backgroundColor: colors.brand,
+		padding: spacing.lg,
+		borderRadius: radii.md,
 		alignItems: 'center',
 		marginTop: 18,
 	},
 
 	buttonText: {
-		color: '#FFFFFF',
-		fontWeight: 'bold',
+		color: colors.surface,
+		fontWeight: fontWeights.bold,
 	},
 
 	historyTitle: {
 		fontSize: 20,
-		fontWeight: 'bold',
-		color: '#102A43',
-		marginTop: 28,
-		marginBottom: 12,
+		fontWeight: fontWeights.bold,
+		color: colors.brand,
+		marginTop: spacing.xxxl,
+		marginBottom: spacing.md,
 	},
 
 	expenseCard: {
-		backgroundColor: '#FFFFFF',
-		padding: 16,
+		backgroundColor: colors.surface,
+		padding: spacing.lg,
 		borderRadius: 14,
 		marginBottom: 10,
 		flexDirection: 'row',
@@ -394,25 +395,25 @@ const styles = StyleSheet.create({
 	},
 
 	expenseName: {
-		color: '#243B53',
-		fontWeight: '600',
+		color: colors.text,
+		fontWeight: fontWeights.semibold,
 	},
 
 	expenseCategory: {
-		color: '#829AB1',
+		color: colors.subtle,
 		fontSize: 12,
-		marginTop: 4,
+		marginTop: spacing.xs,
 	},
 
 	expenseValue: {
-		color: '#C53030',
-		fontWeight: 'bold',
+		color: colors.danger,
+		fontWeight: fontWeights.bold,
 	},
 
 	empty: {
-		color: '#829AB1',
+		color: colors.subtle,
 		textAlign: 'center',
-		marginTop: 20,
+		marginTop: spacing.xl,
 	},
 });
 

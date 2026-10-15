@@ -468,13 +468,13 @@ type ResumoRemotoPedidos = {
   emProducao: number;
 };
 
-async function obterResumoRemotoPedidos() {
+async function obterResumoRemotoPedidos(period = 'GERAL') {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
   if (!apiUrl) return null;
   const token = await obterTokenAdministrador();
   if (!token) throw new Error('Inicie sessão como administrador para consultar os resumos online.');
 
-  const response = await fetch(`${apiUrl}/inventory/reports?period=GERAL`, {
+  const response = await fetch(`${apiUrl}/inventory/reports?period=${encodeURIComponent(period)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const body = await response.json().catch(() => null) as (ResumoRemotoPedidos & { message?: unknown }) | null;
@@ -549,6 +549,18 @@ export async function obterEstatisticasPedidos(): Promise<EstatisticasPedidos> {
     valorTotal:
       Math.round(resultado?.valorTotalCentavos ?? 0) / 100,
   };
+}
+
+export async function obterPedidosHoje(): Promise<number> {
+  const remoto = await obterResumoRemotoPedidos('HOJE');
+  if (remoto) return remoto.totalPedidos;
+
+  const resultado = await db.getFirstAsync<{ totalPedidos: number }>(
+    `SELECT COUNT(*) AS totalPedidos
+     FROM pedidos
+     WHERE date(data_criacao, 'localtime') = date('now', 'localtime')`
+  );
+  return resultado?.totalPedidos ?? 0;
 }
 
 export async function registrarPagamento(
