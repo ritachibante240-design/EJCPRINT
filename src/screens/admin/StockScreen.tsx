@@ -2,6 +2,7 @@ import { formatarDinheiro } from '../../utils/formatters';
 import { colors, fontWeights, radii, spacing } from '../../theme';
 import { showAppAlert } from '../../components/AppAlert';
 import ActionButton from '../../components/ActionButton';
+import TextInput from '../../components/AppTextInput';
 import React, { useCallback, useState } from 'react';
 
 import {
@@ -10,7 +11,6 @@ import {
   StyleSheet,
   FlatList,
   Pressable,
-  TextInput,
   Modal,
   ScrollView,
 } from 'react-native';

@@ -1,6 +1,7 @@
 import { formatarDinheiro } from '../../utils/formatters';
 import { colors, fontWeights, radii, spacing } from '../../theme';
 import { showAppAlert } from '../../components/AppAlert';
+import TextInput from '../../components/AppTextInput';
 import React, { useCallback, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -11,7 +12,6 @@ import {
 	FlatList,
 	Pressable,
 	Alert,
-	TextInput,
 	Modal,
 	Image,
 } from 'react-native';

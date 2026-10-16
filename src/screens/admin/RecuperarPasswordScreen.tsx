@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import TextInput from '../../components/AppTextInput';
 import { colors, fontWeights, radii, spacing } from '../../theme';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { redefinirPasswordAdministrador, solicitarRecuperacaoAdministrador } from '../../services/adminAuthService';
 import { useResponsiveContent } from '../../hooks/useResponsive';

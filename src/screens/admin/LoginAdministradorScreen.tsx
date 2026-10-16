@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import TextInput from '../../components/AppTextInput';
 import { colors, fontWeights, radii, spacing } from '../../theme';
 import {
   ActivityIndicator,
@@ -9,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';

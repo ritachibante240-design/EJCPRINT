@@ -1,4 +1,5 @@
 import { showAppAlert } from "../../components/AppAlert";
+import TextInput from "../../components/AppTextInput";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
@@ -9,7 +10,6 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
-  TextInput,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";

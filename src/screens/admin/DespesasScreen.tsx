@@ -1,10 +1,10 @@
 import { showAppAlert } from '../../components/AppAlert';
+import TextInput from '../../components/AppTextInput';
 import { colors, fontWeights, radii, spacing } from '../../theme';
 import React, { useCallback, useState } from 'react';
 import {
 	View,
 	Text,
-	TextInput,
 	Pressable,
 	StyleSheet,
 	FlatList,
@@ -416,4 +416,3 @@ const styles = StyleSheet.create({
 		marginTop: spacing.xl,
 	},
 });
-

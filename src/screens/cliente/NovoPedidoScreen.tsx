@@ -1,4 +1,5 @@
 import { showAppAlert } from "../../components/AppAlert";
+import TextInput from "../../components/AppTextInput";
 import { colors, fontWeights, radii, spacing } from '../../theme';
 import React, { Fragment, useMemo, useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
@@ -15,7 +16,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import PagamentoModal from "../../components/PagamentoModal";
