@@ -784,7 +784,7 @@ export class InventoryService {
         movement,
         costs,
       };
-    });
+    }, { maxWait: 10_000, timeout: 20_000 });
   }
 
   private validateQuantityUnit(unit: string, quantity: number) {
