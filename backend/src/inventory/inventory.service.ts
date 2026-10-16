@@ -1,9 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
-import { AdjustStockDto, InitialStockCostDto, PurchaseStockDto, SetStockUnitCostDto, WasteStockDto } from './dto/stock-operation.dto';
+import { AdjustStockDto, ConfigureInkStockDto, InitialStockCostDto, PurchaseStockDto, SetStockUnitCostDto, WasteStockDto } from './dto/stock-operation.dto';
 
 const PAPER_SERVICES = new Set([
   'Impressão P/B',
@@ -47,6 +48,17 @@ function calculatePrintCosts(input: {
   };
 }
 
+function estimateInkBottleConsumption(service: string, printedPages: number) {
+  const bottlesPerPage = service === 'Impressão P/B' || service === 'Fotocópia P/B'
+    ? 1 / PRINT_COST_DEFAULTS.blackInkYieldPages
+    : service === 'Colorida simples' || service === 'Colorida com imagens'
+      ? 3 / PRINT_COST_DEFAULTS.colorInkYieldPages
+      : 0;
+  return Math.round(
+    printedPages * bottlesPerPage * (1 + PRINT_COST_DEFAULTS.wasteReserveRate) * 1_000_000,
+  ) / 1_000_000;
+}
+
 @Injectable()
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
@@ -86,9 +98,10 @@ export class InventoryService {
     }
 
     const paper = normalizedName === 'papel a4' || normalizedName === 'a4';
+    const ink = ['tinta-epson l3252', 'tinta epson l3252'].includes(normalizedName);
     const itemName = paper ? 'Papel A4' : name;
-    const itemCategory = paper ? 'Papel' : category;
-    const itemUnit = paper ? 'folhas' : unit;
+    const itemCategory = paper ? 'Papel' : ink ? 'Tinta' : category;
+    const itemUnit = paper ? 'folhas' : ink ? 'frascos' : unit;
     this.validateQuantityUnit(itemUnit, input.quantity);
     this.validateQuantityUnit(itemUnit, input.minimumQuantity);
 
@@ -338,6 +351,60 @@ export class InventoryService {
         'STOCK',
         item.id,
         `Custo unitário de ${item.name} alterado de ${item.averageUnitCost.toFixed(2)} para ${nextUnitCost.toFixed(2)} MT/${item.unit}.`,
+      );
+      return updatedItem;
+    });
+  }
+
+  async configureInkStock(stockItemId: string, input: ConfigureInkStockDto, actor?: string) {
+    const externalReference = input.externalReference.trim();
+    if (!externalReference || !Number.isSafeInteger(input.unitCostCents)) {
+      throw new BadRequestException('Os dados de configuração da tinta são inválidos.');
+    }
+    this.validateQuantityUnit('frascos', input.quantity);
+    this.validateQuantityUnit('frascos', input.minimumQuantity);
+
+    return this.prisma.$transaction(async (transaction) => {
+      const previous = await transaction.stockMovement.findUnique({
+        where: { externalReference },
+        include: { stockItem: true },
+      });
+      if (previous) return previous.stockItem;
+
+      const item = await transaction.stockItem.findUnique({ where: { id: stockItemId } });
+      if (!item) throw new NotFoundException('Material não encontrado.');
+      if (!['tinta-epson l3252', 'tinta epson l3252'].includes(item.normalizedName)) {
+        throw new BadRequestException('Esta configuração só pode ser usada no material Tinta Epson L3252.');
+      }
+
+      const unitCost = input.unitCostCents / 100;
+      const quantityDifference = Math.abs(input.quantity - item.quantity);
+      await transaction.stockMovement.create({
+        data: {
+          externalReference,
+          stockItemId: item.id,
+          type: 'CORRECAO_TINTA',
+          quantity: quantityDifference,
+          unitCost,
+          reason: `Configuração física da tinta: ${item.quantity} ${item.unit} / ${item.averageUnitCost.toFixed(2)} MT por ${item.unit} → ${input.quantity} frascos / ${unitCost.toFixed(2)} MT por frasco.`,
+        },
+      });
+      const updatedItem = await transaction.stockItem.update({
+        where: { id: item.id },
+        data: {
+          unit: 'frascos',
+          quantity: input.quantity,
+          minimumQuantity: input.minimumQuantity,
+          averageUnitCost: unitCost,
+        },
+      });
+      await this.registarAuditoria(
+        transaction,
+        actor,
+        'STOCK_INK_RECONCILED',
+        'STOCK',
+        item.id,
+        `Tinta Epson L3252 configurada: stock ${item.quantity} ${item.unit} → ${input.quantity} frascos; custo ${item.averageUnitCost.toFixed(2)} → ${unitCost.toFixed(2)} MT/frasco; mínimo definido em ${input.minimumQuantity} frascos.`,
       );
       return updatedItem;
     });
@@ -738,11 +805,23 @@ export class InventoryService {
         where: { normalizedName: { in: ['tinta-epson l3252', 'tinta epson l3252'] } },
       });
       if (!paper) throw new BadRequestException('Papel A4 não está cadastrado no stock.');
+      if (!ink) throw new BadRequestException('A Tinta Epson L3252 não está cadastrada no stock.');
       if (!Number.isInteger(order.sheetsRequired) || order.sheetsRequired <= 0) {
         throw new BadRequestException('Este pedido não possui um cálculo válido de folhas.');
       }
       if (paper.quantity < order.sheetsRequired) {
         throw new BadRequestException(`Stock insuficiente. Necessário: ${order.sheetsRequired} folhas. Disponível: ${paper.quantity} folhas.`);
+      }
+      if (!['frasco', 'frascos'].includes(ink.unit.trim().toLowerCase())) {
+        throw new BadRequestException('Configure a Tinta Epson L3252 para ser controlada em frascos antes de iniciar a impressão.');
+      }
+
+      const printedPages = order.pageCount * order.copyCount;
+      const inkQuantity = estimateInkBottleConsumption(order.service, printedPages);
+      if (inkQuantity > 0 && ink.quantity < inkQuantity) {
+        throw new BadRequestException(
+          `Stock de tinta insuficiente. Esta impressão necessita de aproximadamente ${inkQuantity.toFixed(6)} frasco(s), mas existem ${ink.quantity.toFixed(6)}.`,
+        );
       }
 
       const movement = await transaction.stockMovement.create({
@@ -757,6 +836,25 @@ export class InventoryService {
           reason: `Impressão do pedido ${order.number}`,
         },
       });
+      if (inkQuantity > 0) {
+        const inkMovementReference = `ink-consumption-${createHash('sha256').update(orderId).digest('hex')}`;
+        await transaction.stockMovement.create({
+          data: {
+            externalReference: inkMovementReference,
+            stockItemId: ink.id,
+            orderId,
+            type: 'CONSUMO_TINTA',
+            quantity: inkQuantity,
+            unitCost: ink.averageUnitCost,
+            amountCents: Math.round(inkQuantity * ink.averageUnitCost * 100),
+            reason: `Consumo estimado de tinta na impressão do pedido ${order.number} (${printedPages} página(s), incluindo 10% de reserva).`,
+          },
+        });
+        await transaction.stockItem.update({
+          where: { id: ink.id },
+          data: { quantity: { decrement: inkQuantity } },
+        });
+      }
       const stockItem = await transaction.stockItem.update({
         where: { id: paper.id },
         data: { quantity: { decrement: order.sheetsRequired } },
@@ -776,7 +874,7 @@ export class InventoryService {
         'ORDER_PRINTING_STARTED',
         'ORDER',
         order.id,
-        `Pedido ${order.number}: ${order.status} → PRINTING; consumo ${order.sheetsRequired} folhas com custo direto estimado de ${costs.total.toFixed(2)} MT.`,
+        `Pedido ${order.number}: ${order.status} → PRINTING; consumo ${order.sheetsRequired} folhas e aproximadamente ${inkQuantity.toFixed(6)} frasco(s) de tinta; custo direto estimado de ${costs.total.toFixed(2)} MT.`,
       );
       return {
         order: updatedOrder,

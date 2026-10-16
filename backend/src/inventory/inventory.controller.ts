@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard, AdminAuthenticatedRequest } from '../auth/admin-auth.guard';
-import { AdjustStockDto, ApplyPrintCostDefaultsDto, InitialStockCostDto, PurchaseStockDto, SetStockUnitCostDto, StartPrintDto, WasteStockDto } from './dto/stock-operation.dto';
+import { AdjustStockDto, ApplyPrintCostDefaultsDto, ConfigureInkStockDto, InitialStockCostDto, PurchaseStockDto, SetStockUnitCostDto, StartPrintDto, WasteStockDto } from './dto/stock-operation.dto';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import { InventoryService } from './inventory.service';
@@ -38,6 +38,11 @@ export class InventoryController {
   @Post('items/:id/unit-cost')
   setUnitCost(@Param('id') id: string, @Body() body: SetStockUnitCostDto, @Req() request: AdminAuthenticatedRequest) {
     return this.inventory.setUnitCost(id, body, request.adminActor);
+  }
+
+  @Post('items/:id/ink-stock')
+  configureInkStock(@Param('id') id: string, @Body() body: ConfigureInkStockDto, @Req() request: AdminAuthenticatedRequest) {
+    return this.inventory.configureInkStock(id, body, request.adminActor);
   }
 
   @Post('cost-calculator/apply-defaults')

@@ -20,6 +20,7 @@ function obterTituloAcao(acao: string) {
     STOCK_ADJUSTED: 'Stock ajustado',
     STOCK_INITIAL_COST_SET: 'Custo inicial definido',
     STOCK_UNIT_COST_UPDATED: 'Custo unitário atualizado',
+    STOCK_INK_RECONCILED: 'Stock de tinta configurado',
     PRINT_COST_DEFAULTS_APPLIED: 'Custos de impressão atualizados',
     STOCK_WASTE_RECORDED: 'Desperdício registado',
     EXPENSE_RECORDED: 'Despesa registada',

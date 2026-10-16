@@ -105,6 +105,7 @@ export async function criarItemStock(
   }
 
   const ehPapelA4 = nomeNormalizado === 'papel a4';
+  const ehTintaEpson = ['tinta-epson l3252', 'tinta epson l3252'].includes(nomeNormalizado);
   if (
     (ehPapelA4 || unidade.trim().toLocaleLowerCase() === 'folhas') &&
     (!Number.isSafeInteger(quantidade) ||
@@ -118,8 +119,8 @@ export async function criarItemStock(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: ehPapelA4 ? 'Papel A4' : nome.trim(),
-      category: ehPapelA4 ? 'Papel' : categoria.trim(),
-      unit: ehPapelA4 ? 'folhas' : unidade.trim(),
+      category: ehPapelA4 ? 'Papel' : ehTintaEpson ? 'Tinta' : categoria.trim(),
+      unit: ehPapelA4 ? 'folhas' : ehTintaEpson ? 'frascos' : unidade.trim(),
       quantity: quantidade,
       minimumQuantity: stockMinimo,
       externalReference: `stock-create-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -290,6 +291,40 @@ export async function definirCustoUnitarioStock(
     }),
   });
   return normalizarItemRemoto(custoRemoto);
+}
+
+export async function configurarStockTinta(
+  stockId: number | string,
+  quantidadeFrascos: number,
+  minimoFrascos: number,
+  custoPorFrasco: number
+) {
+  if (
+    !Number.isFinite(quantidadeFrascos) ||
+    quantidadeFrascos < 0 ||
+    !Number.isFinite(minimoFrascos) ||
+    minimoFrascos < 0 ||
+    !Number.isFinite(custoPorFrasco) ||
+    custoPorFrasco < 0
+  ) {
+    throw new Error('Informe quantidades e custo válidos para os frascos.');
+  }
+  const unitCostCents = Math.round((custoPorFrasco + Number.EPSILON) * 100);
+  if (!Number.isSafeInteger(unitCostCents) || unitCostCents > 2_147_483_647) {
+    throw new Error('O custo por frasco é demasiado elevado.');
+  }
+
+  const item = await exigirStockRemoto<any>(`/inventory/items/${stockId}/ink-stock`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      quantity: quantidadeFrascos,
+      minimumQuantity: minimoFrascos,
+      unitCostCents,
+      externalReference: `ink-stock-config-${stockId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }),
+  });
+  return normalizarItemRemoto(item);
 }
 
 export async function aplicarCustosPadraoImpressao() {

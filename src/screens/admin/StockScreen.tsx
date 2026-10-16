@@ -12,7 +12,6 @@ import {
   Pressable,
   TextInput,
   Modal,
-  Alert,
   ScrollView,
 } from 'react-native';
 
@@ -27,6 +26,7 @@ import {
   removerStock,
   registrarCompraStock,
   definirCustoUnitarioStock,
+  configurarStockTinta,
   aplicarCustosPadraoImpressao,
   ajustarQuantidadeStock,
   registrarDesperdicio,
@@ -50,6 +50,7 @@ const unidadesDisponiveis = [
   'unidades',
   'caixas',
   'pacotes',
+  'frascos',
   'litros',
 ];
 
@@ -63,6 +64,7 @@ export default function StockScreen() {
   const [modalCustoUnitario, setModalCustoUnitario] = useState(false);
   const [modalDesperdicio, setModalDesperdicio] = useState(false);
   const [modalAjuste, setModalAjuste] = useState(false);
+  const [modalConfigurarTinta, setModalConfigurarTinta] = useState(false);
   const [modalCalculadora, setModalCalculadora] = useState(false);
   const [itemSelecionado, setItemSelecionado] =
     useState<ItemStock | null>(null);
@@ -77,6 +79,9 @@ export default function StockScreen() {
   const [valorCompra, setValorCompra] = useState('');
   const [quantidadeCompra, setQuantidadeCompra] = useState('');
   const [valorCustoUnitario, setValorCustoUnitario] = useState('');
+  const [quantidadeFrascos, setQuantidadeFrascos] = useState('');
+  const [minimoFrascos, setMinimoFrascos] = useState('');
+  const [custoPorFrasco, setCustoPorFrasco] = useState('');
   const [quantidadeDesperdicio, setQuantidadeDesperdicio] = useState('');
   const [motivoDesperdicio, setMotivoDesperdicio] = useState('');
   const [quantidadeReal, setQuantidadeReal] = useState('');
@@ -205,6 +210,9 @@ export default function StockScreen() {
     if (novoNome.trim().toLocaleLowerCase() === 'papel a4') {
       setCategoria('Papel');
       setUnidade('folhas');
+    } else if (['tinta-epson l3252', 'tinta epson l3252'].includes(novoNome.trim().toLocaleLowerCase())) {
+      setCategoria('Tinta');
+      setUnidade('frascos');
     }
   }
 
@@ -359,6 +367,59 @@ export default function StockScreen() {
     setItemSelecionado(item);
     setValorCustoUnitario(item.custo_medio.toFixed(2));
     setModalCustoUnitario(true);
+  }
+
+  function abrirConfiguracaoTinta(item: ItemStock) {
+    setItemSelecionado(item);
+    setQuantidadeFrascos('');
+    setMinimoFrascos('');
+    setCustoPorFrasco('');
+    setModalConfigurarTinta(true);
+  }
+
+  async function confirmarConfiguracaoTinta() {
+    if (processandoStock || !itemSelecionado) return;
+    const quantidade = Number(quantidadeFrascos.replace(',', '.'));
+    const minimo = Number(minimoFrascos.replace(',', '.'));
+    const custo = Number(custoPorFrasco.replace(',', '.'));
+    if (!Number.isFinite(quantidade) || quantidade < 0 || !Number.isFinite(minimo) || minimo < 0 || !Number.isFinite(custo) || custo < 0) {
+      showAppAlert('Dados inválidos', 'Informe o número de frascos atual, o mínimo e o custo por frasco.');
+      return;
+    }
+    try {
+      setProcessandoStock(true);
+      await configurarStockTinta(itemSelecionado.id, quantidade, minimo, custo);
+      setModalConfigurarTinta(false);
+      setItemSelecionado(null);
+      setQuantidadeFrascos('');
+      setMinimoFrascos('');
+      setCustoPorFrasco('');
+      await carregar();
+      showAppAlert('Stock de tinta configurado', 'O material passa a ser controlado em frascos. A configuração não regista compra nem altera o Caixa.');
+    } catch (erro) {
+      showAppAlert('Erro', erro instanceof Error ? erro.message : 'Não foi possível configurar o stock de tinta.');
+    } finally {
+      setProcessandoStock(false);
+    }
+  }
+
+  function pedirConfirmacaoConfiguracaoTinta() {
+    if (!itemSelecionado || processandoStock) return;
+    const quantidade = Number(quantidadeFrascos.replace(',', '.'));
+    const minimo = Number(minimoFrascos.replace(',', '.'));
+    const custo = Number(custoPorFrasco.replace(',', '.'));
+    if (!Number.isFinite(quantidade) || quantidade < 0 || !Number.isFinite(minimo) || minimo < 0 || !Number.isFinite(custo) || custo < 0) {
+      showAppAlert('Dados inválidos', 'Informe o número de frascos atual, o mínimo e o custo por frasco.');
+      return;
+    }
+    showAppAlert(
+      'Confirmar stock físico da tinta',
+      `Será definido o stock em ${quantidade} frasco(s), custo de ${custo.toFixed(2)} MT por frasco e aviso de reposição em ${minimo} frasco(s). Conte os frascos disponíveis; a quantidade antiga não será convertida automaticamente.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Confirmar', onPress: confirmarConfiguracaoTinta },
+      ],
+    );
   }
 
   function pedirConfirmacaoCustoUnitario() {
@@ -585,8 +646,23 @@ export default function StockScreen() {
           <View style={styles.materialInfo}><Text style={styles.materialName}>{item.nome}</Text><Text style={styles.materialCategory}>{item.categoria}</Text></View>
           {stockBaixo && <View style={styles.lowBadge}><Text style={styles.lowBadgeText}>Repor</Text></View>}
         </View>
-        <View style={styles.stockArea}><Text style={styles.stockNumber}>{item.quantidade.toLocaleString()}</Text><Text style={styles.stockUnit}>{item.unidade}</Text></View>
+        <View style={styles.stockArea}><Text style={styles.stockNumber}>{item.quantidade.toLocaleString('pt-PT', { maximumFractionDigits: 6 })}</Text><Text style={styles.stockUnit}>{item.unidade}</Text></View>
         <Text style={styles.availableText}>disponíveis</Text>
+        {['tinta epson l3252', 'tinta-epson l3252'].includes(item.nome.trim().toLocaleLowerCase()) && (
+          <Text style={styles.initialCostHint}>
+            Stock único em frascos. Consumo estimado: 1/4.500 por página a preto e branco ou 3/7.500 por página a cores, mais 10% de reserva.
+          </Text>
+        )}
+        {['tinta epson l3252', 'tinta-epson l3252'].includes(item.nome.trim().toLocaleLowerCase()) && !['frasco', 'frascos'].includes(item.unidade.trim().toLocaleLowerCase()) && (
+          <Pressable
+            accessibilityRole="button"
+            style={styles.initialCostButton}
+            onPress={() => abrirConfiguracaoTinta(item)}
+          >
+            <Ionicons name="options-outline" size={18} color={colors.brand} />
+            <Text style={styles.initialCostText}>Configurar stock da tinta em frascos</Text>
+          </Pressable>
+        )}
         <View style={styles.divider} />
         <View style={styles.detailRow}><Text style={styles.detailLabel}>Repor quando chegar a</Text><Text style={styles.detailValue}>{item.stock_minimo} {item.unidade}</Text></View>
         <View style={styles.detailRow}><Text style={styles.detailLabel}>Custo médio</Text><Text style={styles.detailValue}>{item.custo_medio > 0 ? `${item.custo_medio.toFixed(4)} MT/${item.unidade}` : 'Ainda não definido'}</Text></View>
@@ -854,7 +930,7 @@ export default function StockScreen() {
       {/* MOVIMENTAÇÃO */}
 
       <Modal
-        visible={itemSelecionado !== null && !modalCompra && !modalCustoUnitario && !modalDesperdicio && !modalAjuste}
+        visible={itemSelecionado !== null && !modalCompra && !modalCustoUnitario && !modalConfigurarTinta && !modalDesperdicio && !modalAjuste}
         transparent
         animationType="fade"
         onRequestClose={() =>
@@ -1030,6 +1106,33 @@ export default function StockScreen() {
             <Text style={styles.initialCostHint}>Este custo será usado nos próximos cálculos. Não altera a quantidade, o Caixa nem os custos guardados nas impressões anteriores.</Text>
             <ActionButton title="Guardar custo" loading={processandoStock} onPress={pedirConfirmacaoCustoUnitario} style={styles.confirmButton} />
           </View>
+        </View>
+      </Modal>
+
+      <Modal visible={modalConfigurarTinta} transparent animationType="slide" onRequestClose={() => setModalConfigurarTinta(false)}>
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={styles.configInkOverlay} keyboardShouldPersistTaps="handled">
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>Configurar tinta em frascos</Text>
+                  <Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setModalConfigurarTinta(false)}>
+                  <Ionicons name="close" size={28} color={colors.brand} />
+                </Pressable>
+              </View>
+              <Text style={styles.initialCostHint}>Conte o total de frascos que quer controlar neste stock único. A quantidade anterior, que pode estar em pacotes, não será convertida automaticamente.</Text>
+              <Text style={styles.inputLabel}>Frascos disponíveis agora</Text>
+              <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Ex.: 2" value={quantidadeFrascos} onChangeText={setQuantidadeFrascos} />
+              <Text style={styles.inputLabel}>Avisar para repor quando restarem</Text>
+              <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Ex.: 1" value={minimoFrascos} onChangeText={setMinimoFrascos} />
+              <Text style={styles.inputLabel}>Custo de um frasco (MT)</Text>
+              <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Ex.: 200,00" value={custoPorFrasco} onChangeText={setCustoPorFrasco} />
+              <Text style={styles.initialCostHint}>Esta configuração regista uma contagem/custo inicial; não cria despesa nem altera o Caixa.</Text>
+              <ActionButton title="Guardar configuração" loading={processandoStock} onPress={pedirConfirmacaoConfiguracaoTinta} style={styles.confirmButton} />
+            </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -1424,6 +1527,7 @@ const styles = StyleSheet.create({
   editStockText: { color: colors.brand, fontSize: 12, fontWeight: fontWeights.bold },
   moreButton: { width: 48, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(16,42,67,0.35)', justifyContent: 'flex-end' },
+  configInkOverlay: { flexGrow: 1, justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.surface, padding: 22, paddingBottom: 35, borderTopLeftRadius: 25, borderTopRightRadius: 25 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 25 },
   modalSubtitle: { color: colors.muted, marginTop: spacing.xs },

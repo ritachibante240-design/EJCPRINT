@@ -131,6 +131,20 @@ aplique também a migration `20261015150000_add_ink_unit_cost_to_stock_movement`
 correspondente à base SQLite ou MySQL. Assim, as alterações de custo não
 modificam os custos estimados que já ficaram guardados nas impressões anteriores.
 
+Ao iniciar impressões, o backend desconta do material `Tinta Epson L3252` o
+consumo estimado em frascos: 1/4.500 por página a preto e branco ou 3/7.500 por
+página a cores, incluindo a reserva de 10% já usada nos custos estimados. O
+material deve estar cadastrado em frascos. Se o stock de papel ou tinta for
+insuficiente, a operação inteira é cancelada; se o botão for acionado novamente
+para um pedido já iniciado, a chave única do movimento impede um segundo débito.
+Não é necessária nova migration de base de dados para estes movimentos, pois
+utilizam os campos de stock existentes.
+
+Se a tinta ainda estiver noutra unidade, use **Configurar stock da tinta em
+frascos** na gestão de stock, conte os frascos físicos e informe o custo por
+frasco e o mínimo de reposição. O sistema não converte automaticamente pacotes
+em frascos e essa configuração não cria uma compra nem uma saída no Caixa.
+
 Pagamentos locais pendentes, sem comprovativo disponível e ainda sem registo no
 servidor, são marcados localmente como rejeitados com a indicação de que o
 comprovativo deve ser enviado novamente. Isso não confirma nem contabiliza o

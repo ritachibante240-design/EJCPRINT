@@ -50,6 +50,26 @@ export class SetStockUnitCostDto {
   unitCostCents!: number;
 }
 
+export class ConfigureInkStockDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
+  externalReference!: string;
+
+  @IsNumber({ allowInfinity: false, allowNaN: false })
+  @Min(0)
+  quantity!: number;
+
+  @IsNumber({ allowInfinity: false, allowNaN: false })
+  @Min(0)
+  minimumQuantity!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(2_147_483_647)
+  unitCostCents!: number;
+}
+
 export class StartPrintDto {
   @IsString()
   @IsNotEmpty()
