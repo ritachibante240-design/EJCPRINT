@@ -638,6 +638,10 @@ export default function StockScreen() {
   }) {
     const stockBaixo =
       item.quantidade <= item.stock_minimo;
+    const nomeNormalizado = item.nome.trim().toLocaleLowerCase();
+    const ehPapelA4 = ['papel a4', 'a4'].includes(nomeNormalizado);
+    const ehTintaEpson = ['tinta epson l3252', 'tinta-epson l3252'].includes(nomeNormalizado);
+    const unidadeCusto = ehPapelA4 ? 'folha' : ehTintaEpson ? 'frasco' : item.unidade;
 
     return (
       <View style={styles.materialCard}>
@@ -648,12 +652,12 @@ export default function StockScreen() {
         </View>
         <View style={styles.stockArea}><Text style={styles.stockNumber}>{item.quantidade.toLocaleString('pt-PT', { maximumFractionDigits: 6 })}</Text><Text style={styles.stockUnit}>{item.unidade}</Text></View>
         <Text style={styles.availableText}>disponíveis</Text>
-        {['tinta epson l3252', 'tinta-epson l3252'].includes(item.nome.trim().toLocaleLowerCase()) && (
+        {ehTintaEpson && (
           <Text style={styles.initialCostHint}>
             Stock único em frascos. Consumo estimado: 1/4.500 por página a preto e branco ou 3/7.500 por página a cores, mais 10% de reserva.
           </Text>
         )}
-        {['tinta epson l3252', 'tinta-epson l3252'].includes(item.nome.trim().toLocaleLowerCase()) && !['frasco', 'frascos'].includes(item.unidade.trim().toLocaleLowerCase()) && (
+        {ehTintaEpson && !['frasco', 'frascos'].includes(item.unidade.trim().toLocaleLowerCase()) && (
           <Pressable
             accessibilityRole="button"
             style={styles.initialCostButton}
@@ -665,10 +669,17 @@ export default function StockScreen() {
         )}
         <View style={styles.divider} />
         <View style={styles.detailRow}><Text style={styles.detailLabel}>Repor quando chegar a</Text><Text style={styles.detailValue}>{item.stock_minimo} {item.unidade}</Text></View>
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>Custo médio</Text><Text style={styles.detailValue}>{item.custo_medio > 0 ? `${item.custo_medio.toFixed(4)} MT/${item.unidade}` : 'Ainda não definido'}</Text></View>
+        <View style={styles.detailRow}><Text style={styles.detailLabel}>Custo médio por {unidadeCusto}</Text><Text style={styles.detailValue}>{item.custo_medio > 0 ? formatarDinheiro(item.custo_medio) : 'Ainda não definido'}</Text></View>
+        {(ehPapelA4 || ehTintaEpson) && (
+          <Text style={styles.initialCostHint}>
+            {ehPapelA4
+              ? 'Este valor é o custo de uma folha, não o custo total da impressão.'
+              : 'Este valor é o custo de um frasco; o sistema estima o custo usado em cada impressão.'}
+          </Text>
+        )}
         <Pressable style={styles.initialCostButton} onPress={() => abrirEdicaoCusto(item)}>
           <Ionicons name="create-outline" size={18} color={colors.brand} />
-          <Text style={styles.initialCostText}>Editar custo por {item.unidade}</Text>
+          <Text style={styles.initialCostText}>Editar custo por {unidadeCusto}</Text>
         </Pressable>
         <View style={styles.materialActions}>
           <Pressable
