@@ -12,6 +12,7 @@ const TAMANHO_PAGINA = 100;
 function obterTituloAcao(acao: string) {
   const titulos: Record<string, string> = {
     ORDER_STATUS_CHANGED: 'Estado do pedido alterado',
+    ORDER_CUSTOMER_DATA_ANONYMIZED: 'Dados do cliente anonimizados',
     ORDER_PRINTING_STARTED: 'Impressão iniciada',
     PAYMENT_CONFIRMED: 'Pagamento confirmado',
     PAYMENT_REJECTED: 'Pagamento rejeitado',

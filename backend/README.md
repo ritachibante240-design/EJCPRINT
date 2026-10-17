@@ -172,6 +172,12 @@ conteúdo de `privacy-policy.html`. O endereço de produção é
 Play Store se o domínio do serviço mudar. A aplicação também liga a esta página
 na tela inicial e junto ao envio de um pedido.
 
+Pedidos de anonimização recebidos pelo contacto publicado podem ser processados
+por um administrador autenticado em `POST /api/orders/:id/anonymize`. A ação
+remove os dados pessoais e ficheiros associados ao pedido, preserva os registos
+financeiros e cancela apenas pedidos ainda recebidos ou em preparação. Estados
+posteriores são mantidos e o stock consumido não é reposto.
+
 Atualize a política sempre que mudarem os dados tratados, os fornecedores, os
 contactos ou as práticas de retenção/eliminação. A declaração “Segurança dos
 dados” da Play Console deve continuar consistente com o comportamento real do

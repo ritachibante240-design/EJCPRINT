@@ -10,6 +10,86 @@ import type { OrderStatus } from './order-status';
 export class OrdersService {
   constructor(private readonly prisma: PrismaService, private readonly storage: ObjectStorageService) {}
 
+  async anonymizeCustomerData(orderId: string, actor = 'Administrador') {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        customerName: true,
+        customerPhone: true,
+        documents: { select: { storageKey: true } },
+        payments: { select: { proofStorageKey: true } },
+      },
+    });
+    if (!order) throw new NotFoundException('Pedido não encontrado.');
+    if (order.customerName === 'Cliente removido' && order.customerPhone === '') {
+      return { id: order.id, status: order.status, anonymized: true };
+    }
+
+    const storageKeys = new Set([
+      ...order.documents.map((document) => document.storageKey),
+      ...order.payments.flatMap((payment) => payment.proofStorageKey ? [payment.proofStorageKey] : []),
+    ]);
+    for (const key of storageKeys) {
+      try {
+        await this.storage.delete(key);
+      } catch (error) {
+        if (this.isMissingLocalFile(error)) continue;
+        throw error;
+      }
+    }
+
+    return this.prisma.$transaction(async (transaction) => {
+      const current = await transaction.order.findUnique({
+        where: { id: orderId },
+        select: { id: true, number: true, status: true, customerName: true, customerPhone: true },
+      });
+      if (!current) throw new NotFoundException('Pedido não encontrado.');
+      if (current.customerName === 'Cliente removido' && current.customerPhone === '') {
+        return { id: current.id, status: current.status, anonymized: true };
+      }
+
+      const cancellable = current.status === 'RECEIVED' || current.status === 'PREPARING';
+      const status = cancellable ? 'CANCELLED' : current.status;
+      await transaction.order.update({
+        where: { id: orderId },
+        data: {
+          customerName: 'Cliente removido',
+          customerPhone: '',
+          instructions: null,
+          clientId: null,
+          status,
+        },
+      });
+      await transaction.document.deleteMany({ where: { orderId } });
+      await transaction.payment.updateMany({
+        where: { orderId },
+        data: {
+          reference: null,
+          proofStorageKey: null,
+          proofSha256: null,
+          proofOriginalName: null,
+          proofMimeType: null,
+          proofSizeBytes: null,
+          rejectionReason: null,
+        },
+      });
+      await transaction.adminAuditLog.create({
+        data: {
+          actor: actor.trim() || 'Administrador',
+          action: 'ORDER_CUSTOMER_DATA_ANONYMIZED',
+          entityType: 'ORDER',
+          entityId: current.id,
+          summary: `Pedido ${current.number}: dados pessoais anonimizados; registos financeiros preservados${cancellable ? ' e pedido cancelado' : ''}.`,
+        },
+      });
+
+      return { id: current.id, status, anonymized: true };
+    });
+  }
+
   async create(input: CreateOrderDto) {
     const existingOrder = await this.prisma.order.findUnique({
       where: { externalReference: input.externalReference },
@@ -168,5 +248,9 @@ export class OrdersService {
 
   private newOrderNumber() {
     return `EJC-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+  }
+
+  private isMissingLocalFile(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
   }
 }

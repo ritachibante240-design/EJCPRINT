@@ -51,6 +51,12 @@ export class OrdersController {
   }
 
   @UseGuards(AdminAuthGuard)
+  @Post(':id/anonymize')
+  anonymizeCustomerData(@Param('id') id: string, @Req() request: AdminAuthenticatedRequest) {
+    return this.ordersService.anonymizeCustomerData(id, request.adminActor);
+  }
+
+  @UseGuards(AdminAuthGuard)
   @Get(':id/document')
   async document(@Param('id') id: string, @Res({ passthrough: true }) response: Response): Promise<StreamableFile> {
     const result = await this.ordersService.document(id);

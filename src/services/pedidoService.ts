@@ -317,6 +317,57 @@ export async function atualizarEstadoPedido(
   });
 }
 
+export async function anonimizarPedido(id: number) {
+  const pedido = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', id);
+  if (!pedido) throw new Error('Pedido não encontrado.');
+  if (!pedido.remoto_id) {
+    throw new Error('O pedido ainda não está sincronizado com o servidor. Atualize a lista e tente novamente.');
+  }
+
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
+  if (!apiUrl) throw new Error('A URL do backend não está configurada.');
+  const token = await obterTokenAdministrador();
+  if (!token) throw new Error('Inicie sessão como administrador para anonimizar o pedido.');
+
+  const response = await fetch(`${apiUrl}/orders/${encodeURIComponent(pedido.remoto_id)}/anonymize`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const body = await response.json().catch(() => null) as {
+    id?: string;
+    status?: string;
+    anonymized?: boolean;
+    message?: unknown;
+  } | null;
+  if (!response.ok) {
+    throw new Error(typeof body?.message === 'string' ? body.message : `API respondeu ${response.status}.`);
+  }
+  if (body?.id !== pedido.remoto_id || body.anonymized !== true || !body.status) {
+    throw new Error('O servidor não confirmou a anonimização esperada. Atualize a lista antes de tentar novamente.');
+  }
+
+  const estado = estadosRemotosParaLocal[body.status];
+  if (!estado) throw new Error('O servidor retornou um estado de pedido inválido.');
+  await executarTransacaoLocal(async (transaction) => {
+    await transaction.runAsync(
+      `UPDATE pedidos
+       SET cliente = 'Cliente removido', contacto = '', instrucoes = NULL,
+           documento_nome = NULL, documento_uri = NULL, documento_remoto_id = NULL,
+           estado = ?, sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL
+       WHERE id = ?`,
+      estado,
+      id
+    );
+    await transaction.runAsync(
+      `UPDATE pagamentos
+       SET referencia = NULL, comprovativo_nome = NULL, comprovativo_uri = NULL,
+           motivo_rejeicao = NULL
+       WHERE pedido_id = ?`,
+      id
+    );
+  });
+}
+
 export async function verificarSinalPedido(pedidoId: number) {
   const pedido = await db.getFirstAsync<{
     id: number;

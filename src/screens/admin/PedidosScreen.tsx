@@ -22,6 +22,7 @@ import { useResponsiveContent } from "../../hooks/useResponsive";
 import {
   listarPedidos,
   atualizarEstadoPedido,
+  anonimizarPedido,
   iniciarImpressao,
   calcularResumoPedido,
   Pedido,
@@ -192,6 +193,49 @@ export default function PedidosScreen() {
     } finally {
       setPedidoProcessando(null);
     }
+  }
+
+  async function confirmarAnonimizacao(pedido: Pedido) {
+    if (pedidoProcessando !== null) return;
+    try {
+      setPedidoProcessando(pedido.id);
+      await anonimizarPedido(pedido.id);
+      setPedidoAberto(null);
+      await carregarPedidos(false);
+      showAppAlert(
+        'Pedido anonimizado',
+        'Os dados pessoais e ficheiros associados foram removidos. Os registos financeiros foram mantidos.',
+      );
+    } catch (erro) {
+      showAppAlert(
+        'Não foi possível anonimizar',
+        erro instanceof Error ? erro.message : 'Ocorreu um erro.',
+      );
+    } finally {
+      setPedidoProcessando(null);
+    }
+  }
+
+  function pedirAnonimizacao(pedido: Pedido) {
+    if (pedido.cliente === 'Cliente removido') {
+      showAppAlert('Pedido já anonimizado', 'Os dados pessoais deste pedido já foram removidos.');
+      return;
+    }
+    if (!pedido.remoto_id) {
+      showAppAlert(
+        'Pedido ainda não sincronizado',
+        'Ligue à Internet e atualize a lista para sincronizar o pedido antes de o anonimizar.',
+      );
+      return;
+    }
+    showAppAlert(
+      'Confirmar anonimização do pedido',
+      'Serão removidos o nome, contacto, instruções, documento e comprovativos. Os valores e estados dos pagamentos serão mantidos para prestação de contas. Pedidos ainda recebidos ou em preparação serão cancelados; pedidos em impressão, prontos ou entregues mantêm o estado atual. O stock já consumido não será reposto.',
+      [
+        { text: 'Voltar', style: 'cancel' },
+        { text: 'Anonimizar', onPress: () => void confirmarAnonimizacao(pedido) },
+      ],
+    );
   }
 
   function proximoEstado(pedido: Pedido) {
@@ -716,6 +760,19 @@ export default function PedidosScreen() {
                 {pedidoProcessando === item.id ? <ActivityIndicator color={colors.surface} /> : <><Ionicons name={sinalBloqueado || saldoBloqueado ? "lock-closed-outline" : "arrow-forward-circle-outline"} size={20} color={colors.surface} /><Text style={styles.advanceText}>{sinalBloqueado ? "Aguardando sinal de 50%" : saldoBloqueado ? "Aguardando pagamento" : obterProximaAcao(item.estado, item.servico)}</Text></>}
               </Pressable>
             )}
+            {item.cliente !== 'Cliente removido' && (
+              <Pressable
+                accessibilityRole="button"
+                disabled={pedidoProcessando !== null}
+                style={[styles.privacyActionButton, pedidoProcessando === item.id && styles.actionButtonDisabled]}
+                onPress={() => pedirAnonimizacao(item)}
+              >
+                {pedidoProcessando === item.id
+                  ? <ActivityIndicator color={colors.danger} />
+                  : <Ionicons name="person-remove-outline" size={19} color={colors.danger} />}
+                <Text style={styles.privacyActionText}>Anonimizar dados do cliente</Text>
+              </Pressable>
+            )}
           </View>
         )}
       </View>
@@ -1169,6 +1226,19 @@ const styles = StyleSheet.create({
     gap: 7,
     marginTop: 10,
   },
+  privacyActionButton: {
+    minHeight: 46,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerSoft,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  privacyActionText: { color: colors.danger, fontWeight: fontWeights.bold },
   actionButtonDisabled: { opacity: 0.45 },
   paymentWarning: {
     flexDirection: "row",
