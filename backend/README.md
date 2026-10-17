@@ -163,3 +163,16 @@ O endpoint de criação aceita o campo multipart `proof` para imagens JPEG/PNG o
 PDF até 5 MB. O ficheiro é guardado localmente durante desenvolvimento e no
 bucket privado R2 em produção. Pode ser consultado apenas por
 `GET /api/payments/:id/proof` com sessão de administrador.
+
+## Política de privacidade
+
+A política pública é servida sem autenticação em `GET /api/privacy`, usando o
+conteúdo de `privacy-policy.html`. O endereço de produção é
+`https://ejcprint-1.onrender.com/api/privacy`; mantenha-o atualizado na ficha da
+Play Store se o domínio do serviço mudar. A aplicação também liga a esta página
+na tela inicial e junto ao envio de um pedido.
+
+Atualize a política sempre que mudarem os dados tratados, os fornecedores, os
+contactos ou as práticas de retenção/eliminação. A declaração “Segurança dos
+dados” da Play Console deve continuar consistente com o comportamento real do
+app e dos serviços.

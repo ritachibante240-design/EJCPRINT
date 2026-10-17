@@ -4,6 +4,7 @@ import { Image, ScrollView, View, Text, StyleSheet, Pressable } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsiveContent } from '../../hooks/useResponsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { abrirPoliticaPrivacidade } from '../../utils/privacyPolicy';
 
 export default function InicioScreen({ navigation }: any) {
   const { isDesktop } = useResponsiveContent(20);
@@ -40,6 +41,13 @@ export default function InicioScreen({ navigation }: any) {
         <View style={styles.highlight}><Ionicons name="checkmark-circle-outline" size={21} color={colors.success} /><Text style={styles.highlightTitle}>Qualidade</Text><Text style={styles.highlightText}>Garantida</Text></View>
         <View style={styles.highlight}><Ionicons name="pricetag-outline" size={21} color={colors.success} /><Text style={styles.highlightTitle}>Preços</Text><Text style={styles.highlightText}>Acessíveis</Text></View>
       </View>
+      <Pressable
+        accessibilityRole="link"
+        style={styles.privacyLink}
+        onPress={() => void abrirPoliticaPrivacidade()}
+      >
+        <Text style={styles.privacyLinkText}>Política de privacidade</Text>
+      </Pressable>
       </ScrollView>
       <View style={[styles.bottomBar, { height: 72 + insets.bottom, paddingBottom: 8 + insets.bottom }, isDesktop && { maxWidth: 680, width: '100%', alignSelf: 'center', borderRadius: radii.lg, marginBottom: 14, borderWidth: 1, borderColor: colors.border }]}>
         <Pressable style={styles.bottomItem} onPress={() => navigation.navigate('Acesso')}>
@@ -82,6 +90,8 @@ const styles = StyleSheet.create({
   highlight: { alignItems: 'center', flex: 1 },
   highlightTitle: { color: colors.brand, fontSize: 12, fontWeight: fontWeights.bold, marginTop: 7 },
   highlightText: { color: colors.subtle, fontSize: 11, marginTop: 2 },
+  privacyLink: { alignSelf: 'center', paddingVertical: spacing.lg },
+  privacyLinkText: { color: colors.accent, fontSize: 14, fontWeight: fontWeights.semibold, textDecorationLine: 'underline' },
   bottomBar: { height: 72, flexDirection: 'row', backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, paddingBottom: spacing.sm },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
   bottomActive: { color: colors.brand, fontSize: 11, fontWeight: fontWeights.bold },

@@ -1,6 +1,7 @@
 import { showAppAlert } from "../../components/AppAlert";
 import TextInput from "../../components/AppTextInput";
 import { colors, fontWeights, radii, spacing } from '../../theme';
+import { abrirPoliticaPrivacidade } from '../../utils/privacyPolicy';
 import React, { Fragment, useMemo, useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
 import { Directory, File, Paths } from "expo-file-system";
@@ -604,6 +605,18 @@ export default function NovoPedidoScreen({ navigation }: any) {
               value={contacto}
               onChangeText={setContacto}
             />
+            <View style={styles.privacyNotice}>
+              <Text style={styles.privacyNoticeText}>
+                Usaremos estes dados para gerir o pedido e o pagamento.
+              </Text>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => void abrirPoliticaPrivacidade()}
+                hitSlop={8}
+              >
+                <Text style={styles.privacyNoticeLink}>Leia a Política de Privacidade.</Text>
+              </Pressable>
+            </View>
             <Pressable style={styles.primary} onPress={salvarPedido}>
               <Ionicons
                 name="checkmark-circle-outline"
@@ -736,6 +749,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginBottom: 10,
   },
+  privacyNotice: { marginTop: spacing.sm, marginBottom: spacing.lg },
+  privacyNoticeText: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+  privacyNoticeLink: { color: colors.accent, fontSize: 14, fontWeight: fontWeights.semibold, textDecorationLine: "underline", marginTop: spacing.xs },
   textArea: { minHeight: 110, paddingTop: spacing.md },
   helperText: { color: colors.muted, fontSize: 13, lineHeight: 19, marginBottom: 9 },
   characterCount: { color: colors.subtle, fontSize: 12, textAlign: "right", marginTop: -8, marginBottom: spacing.md },
