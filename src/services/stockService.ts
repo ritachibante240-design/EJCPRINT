@@ -51,6 +51,8 @@ function normalizarItemRemoto(item: any): ItemStock {
     quantidade: Number(item.quantity ?? item.quantidade ?? 0),
     stock_minimo: Number(item.minimumQuantity ?? item.stock_minimo ?? 0),
     custo_medio: Number(item.averageUnitCost ?? item.custo_medio ?? 0),
+    capacidade_minima_folhas: item.bindingMinSheets == null ? null : Number(item.bindingMinSheets),
+    capacidade_maxima_folhas: item.bindingMaxSheets == null ? null : Number(item.bindingMaxSheets),
     data_atualizacao: item.updatedAt ?? item.data_atualizacao ?? new Date().toISOString(),
   };
 }
@@ -63,6 +65,8 @@ export type ItemStock = {
   quantidade: number;
   stock_minimo: number;
   custo_medio: number;
+  capacidade_minima_folhas: number | null;
+  capacidade_maxima_folhas: number | null;
   data_atualizacao: string;
 };
 
@@ -325,6 +329,53 @@ export async function configurarStockTinta(
     }),
   });
   return normalizarItemRemoto(item);
+}
+
+export async function configurarCapacidadeEspiral(
+  stockId: number | string,
+  minimumSheets: number,
+  maximumSheets: number,
+) {
+  if (
+    !Number.isSafeInteger(minimumSheets) ||
+    minimumSheets < 1 ||
+    !Number.isSafeInteger(maximumSheets) ||
+    maximumSheets < minimumSheets
+  ) {
+    throw new Error('Informe uma faixa válida de folhas físicas, confirmada pelo fornecedor.');
+  }
+  const item = await exigirStockRemoto<any>(`/inventory/items/${stockId}/binding-capacity`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minimumSheets, maximumSheets }),
+  });
+  return normalizarItemRemoto(item);
+}
+
+export type OpcaoEspiralEncadernacao = {
+  id: string;
+  name: string;
+  availableQuantity: number;
+  minimumSheets: number;
+  maximumSheets: number;
+};
+
+export async function listarOpcoesEspiralEncadernacao(pedidoRemotoId: string) {
+  const resultado = await exigirStockRemoto<{
+    requiredSheets: number;
+    copyCount: number;
+    blockReason: string | null;
+    options: OpcaoEspiralEncadernacao[];
+  }>(`/inventory/orders/${encodeURIComponent(pedidoRemotoId)}/binding-options`, { method: 'GET' });
+  if (
+    !Number.isSafeInteger(resultado.requiredSheets) ||
+    !Number.isSafeInteger(resultado.copyCount) ||
+    !(typeof resultado.blockReason === 'string' || resultado.blockReason === null) ||
+    !Array.isArray(resultado.options)
+  ) {
+    throw new Error('O backend devolveu opções de espiral inválidas. Atualize o backend e tente novamente.');
+  }
+  return resultado;
 }
 
 export async function aplicarCustosPadraoImpressao() {

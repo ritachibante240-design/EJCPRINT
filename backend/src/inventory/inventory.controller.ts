@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard, AdminAuthenticatedRequest } from '../auth/admin-auth.guard';
-import { AdjustStockDto, ApplyPrintCostDefaultsDto, ConfigureInkStockDto, InitialStockCostDto, PurchaseStockDto, SetStockUnitCostDto, StartPrintDto, WasteStockDto } from './dto/stock-operation.dto';
+import { AdjustStockDto, ApplyPrintCostDefaultsDto, ConfigureBindingCapacityDto, ConfigureInkStockDto, InitialStockCostDto, PurchaseStockDto, SetStockUnitCostDto, StartBindingDto, StartPrintDto, WasteStockDto } from './dto/stock-operation.dto';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import { InventoryService } from './inventory.service';
@@ -43,6 +43,11 @@ export class InventoryController {
   @Post('items/:id/ink-stock')
   configureInkStock(@Param('id') id: string, @Body() body: ConfigureInkStockDto, @Req() request: AdminAuthenticatedRequest) {
     return this.inventory.configureInkStock(id, body, request.adminActor);
+  }
+
+  @Post('items/:id/binding-capacity')
+  configureBindingCapacity(@Param('id') id: string, @Body() body: ConfigureBindingCapacityDto, @Req() request: AdminAuthenticatedRequest) {
+    return this.inventory.configureBindingCapacity(id, body, request.adminActor);
   }
 
   @Post('cost-calculator/apply-defaults')
@@ -100,5 +105,15 @@ export class InventoryController {
   @Post('orders/:id/start-print')
   startPrint(@Param('id') id: string, @Body() body: StartPrintDto, @Req() request: AdminAuthenticatedRequest) {
     return this.inventory.startPrint(id, body.externalReference, request.adminActor);
+  }
+
+  @Get('orders/:id/binding-options')
+  bindingOptions(@Param('id') id: string) {
+    return this.inventory.bindingOptions(id);
+  }
+
+  @Post('orders/:id/start-binding/confirm')
+  startBinding(@Param('id') id: string, @Body() body: StartBindingDto, @Req() request: AdminAuthenticatedRequest) {
+    return this.inventory.startBinding(id, body.spiralStockItemId, request.adminActor);
   }
 }

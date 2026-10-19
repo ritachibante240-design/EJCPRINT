@@ -15,6 +15,13 @@ continua usando a sua base SQLite local durante a transição.
 4. Execute `npm run prisma:migrate -- --name init`.
 5. Execute `npm run start:dev`.
 
+## Testes e verificações
+
+Execute `npm test` para correr os testes automáticos dos cálculos e regras de
+pedidos, confirmação de pagamentos e compatibilidade de materiais de
+encadernação. Antes de publicar alterações, execute também `npm run build` e
+`npm run typecheck`.
+
 ## Desenvolvimento local e APK pela Internet
 
 - O desenvolvimento local continua usando a URL definida em `../.env.local`.
@@ -144,6 +151,36 @@ Se a tinta ainda estiver noutra unidade, use **Configurar stock da tinta em
 frascos** na gestão de stock, conte os frascos físicos e informe o custo por
 frasco e o mínimo de reposição. O sistema não converte automaticamente pacotes
 em frascos e essa configuração não cria uma compra nem uma saída no Caixa.
+
+## Consumo de materiais de encadernação
+
+O administrador inicia a encadernação no pedido que já está **Em impressão**.
+O backend desconta, numa transação única, uma espiral e um conjunto de capas por
+exemplar: uma capa transparente e uma capa forte. A impressão não consome esses
+materiais; a ação só fica concluída se houver stock suficiente dos três itens.
+Pedidos com encadernação não podem ser marcados como prontos antes do registo do
+consumo.
+
+Cadastre as capas como `Capa transparente` e `Capa forte`, e cada espiral com
+um nome identificável, todos na categoria **Encadernação** e unidade
+**unidades**. No cartão de cada espiral, configure a capacidade mínima e máxima
+de **folhas físicas por exemplar** usando apenas os limites da embalagem ou
+confirmados pelo fornecedor. O sistema não preenche faixas padrão. Materiais
+antigos e espirais sem capacidade configurada nunca aparecem como opção.
+
+Para cada pedido, o backend calcula as folhas físicas por exemplar (considera
+frente e verso), mostra somente as espirais cuja faixa confirmada cobre essa
+quantidade e cujo stock cobre todos os exemplares, e exige que o administrador
+escolha uma delas. A API valida novamente essa compatibilidade e o stock no
+momento do débito transacional; seleção inválida, stock insuficiente ou
+especificação ausente não descontam nenhum material. Movimentos e referência
+única impedem descontos parciais/duplicados. O custo médio dos materiais fica
+nos custos internos e relatórios, sem alterar o preço do cliente.
+
+Antes de publicar esta alteração, aplique a migration
+`20261019150000_add_binding_spiral_capacity` correspondente ao backend SQLite ou
+MySQL. A aplicação acrescenta localmente os campos de apresentação ao abrir a
+base de dados.
 
 Pagamentos locais pendentes, sem comprovativo disponível e ainda sem registo no
 servidor, são marcados localmente como rejeitados com a indicação de que o

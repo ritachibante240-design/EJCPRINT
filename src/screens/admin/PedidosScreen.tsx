@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
+  Modal,
+  ScrollView,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
@@ -26,6 +28,7 @@ import {
   iniciarImpressao,
   calcularResumoPedido,
   Pedido,
+  iniciarEncadernacao,
 } from "../../services/pedidoService";
 import { sincronizarTudoPendentes } from "../../services/sincronizacaoSeguraService";
 import { obterNomeEstado, obterProximaAcao } from "../../utils/estadoPedido";
@@ -33,6 +36,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { abrirArquivoPedido } from "../../services/arquivoRemotoService";
 import { obterTokenAdministrador } from "../../services/adminAuthService";
 import { colors, fontWeights, radii, spacing } from '../../theme';
+import { listarOpcoesEspiralEncadernacao, OpcaoEspiralEncadernacao } from '../../services/stockService';
 
 const estados = [
   "Pedido recebido",
@@ -87,6 +91,8 @@ export default function PedidosScreen() {
     null,
   );
   const [documentoProcessando, setDocumentoProcessando] = useState<number | null>(null);
+  const [pedidoSelecionadoEncadernacao, setPedidoSelecionadoEncadernacao] = useState<Pedido | null>(null);
+  const [opcoesEspiral, setOpcoesEspiral] = useState<OpcaoEspiralEncadernacao[]>([]);
   const [busca, setBusca] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("Todos");
   const [filtroPagamento, setFiltroPagamento] = useState<(typeof opcoesPagamento)[number]>("Todos");
@@ -193,6 +199,67 @@ export default function PedidosScreen() {
     } finally {
       setPedidoProcessando(null);
     }
+  }
+
+  async function confirmarInicioEncadernacao(pedido: Pedido, espiral: OpcaoEspiralEncadernacao) {
+    if (pedidoProcessando !== null) return;
+    try {
+      setPedidoProcessando(pedido.id);
+      const resultado = await iniciarEncadernacao(pedido.id, espiral.id);
+      await carregarPedidos(false);
+      showAppAlert(
+        resultado.alreadyConsumed ? "Consumo já registado" : "Encadernação iniciada",
+        `${resultado.alreadyConsumed ? "Este pedido já tinha o consumo registado." : "Stock descontado"}: ${resultado.spiralName} e capas para ${pedido.numero_copias} exemplar(es). Custo interno: ${resultado.cost.toFixed(2)} MT. O preço do cliente não foi alterado.`,
+      );
+    } catch (erro) {
+      showAppAlert(
+        "Não foi possível iniciar a encadernação",
+        erro instanceof Error ? erro.message : "Ocorreu um erro.",
+      );
+    } finally {
+      setPedidoProcessando(null);
+    }
+  }
+
+  async function pedirInicioEncadernacao(pedido: Pedido) {
+    if (pedidoProcessando !== null || !pedido.remoto_id) return;
+    try {
+      setPedidoProcessando(pedido.id);
+      const resultado = await listarOpcoesEspiralEncadernacao(pedido.remoto_id);
+      if (resultado.options.length === 0) {
+        showAppAlert(
+          "Nenhuma espiral compatível confirmada",
+          `${resultado.blockReason ?? `Este pedido precisa de ${resultado.requiredSheets} folhas físicas por exemplar. Configure no Stock a capacidade confirmada de uma espiral compatível e verifique se há ${resultado.copyCount} unidade(s) disponíveis.`} Nenhuma espiral foi selecionada nem stock foi descontado.`,
+        );
+        return;
+      }
+      setOpcoesEspiral(resultado.options);
+      setPedidoSelecionadoEncadernacao(pedido);
+    } catch (erro) {
+      showAppAlert(
+        "Não foi possível verificar as espirais",
+        erro instanceof Error ? erro.message : "Ocorreu um erro.",
+      );
+    } finally {
+      setPedidoProcessando(null);
+    }
+  }
+
+  function selecionarEspiralEncadernacao(espiral: OpcaoEspiralEncadernacao) {
+    const pedido = pedidoSelecionadoEncadernacao;
+    if (!pedido) return;
+    setPedidoSelecionadoEncadernacao(null);
+    showAppAlert(
+      "Confirmar espiral compatível",
+      `${espiral.name}\nCapacidade confirmada: ${espiral.minimumSheets}–${espiral.maximumSheets} folhas físicas.\nStock: ${espiral.availableQuantity} unidade(s); necessário: ${pedido.numero_copias}.\n\nTambém serão descontadas ${pedido.numero_copias} capa(s) transparente(s) e ${pedido.numero_copias} capa(s) forte(s). O preço do cliente não muda.`,
+      [
+        { text: "Voltar", style: "cancel" },
+        {
+          text: "Confirmar e descontar",
+          onPress: () => void confirmarInicioEncadernacao(pedido, espiral),
+        },
+      ],
+    );
   }
 
   async function confirmarAnonimizacao(pedido: Pedido) {
@@ -495,21 +562,33 @@ export default function PedidosScreen() {
           </View>
         </View>
 
-        {item.stock_descontado === 1 && (
+        {(item.stock_descontado === 1 || item.encadernacao_consumida === 1) && (
           <View style={styles.costBox}>
             <Text style={styles.summaryTitle}>Custos diretos</Text>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Papel</Text>
-              <Text style={styles.costValue}>
-                {resumo.custoPapel.toFixed(2)} MT
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Tinta estimada</Text>
-              <Text style={styles.costValue}>
-                {resumo.custoTinta.toFixed(2)} MT
-              </Text>
-            </View>
+            {item.stock_descontado === 1 && (
+              <>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Papel</Text>
+                  <Text style={styles.costValue}>
+                    {resumo.custoPapel.toFixed(2)} MT
+                  </Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Tinta estimada</Text>
+                  <Text style={styles.costValue}>
+                    {resumo.custoTinta.toFixed(2)} MT
+                  </Text>
+                </View>
+              </>
+            )}
+            {item.encadernacao_consumida === 1 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Encadernação</Text>
+                <Text style={styles.costValue}>
+                  {resumo.custoEncadernacao.toFixed(2)} MT
+                </Text>
+              </View>
+            )}
             <View style={styles.divider} />
             <View style={styles.summaryRow}>
               <Text style={styles.totalLabel}>Custos conhecidos</Text>
@@ -692,6 +771,16 @@ export default function PedidosScreen() {
               <Text style={styles.detailLabel}>Folhas</Text>
               <Text style={styles.detailValue}>{item.folhas_necessarias}</Text>
             </View>
+            {item.tipo_encadernacao.trim().toUpperCase() !== "SEM_ENCADERNACAO" && (
+              <View style={styles.detailLine}>
+                <Text style={styles.detailLabel}>Encadernação</Text>
+                <Text style={styles.detailValue}>
+                  {item.encadernacao_consumida === 1
+                    ? `${item.espiral_encadernacao ?? "Espiral registada"} · ${item.numero_copias} exemplar(es)`
+                    : `Pendente · ${item.numero_copias} exemplar(es)`}
+                </Text>
+              </View>
+            )}
             <View style={styles.separator} />
             <View style={styles.detailLine}>
               <Text style={styles.detailLabel}>Recebido confirmado</Text>
@@ -745,6 +834,28 @@ export default function PedidosScreen() {
                 </View>
               </>
             )}
+            {item.encadernacao_consumida === 1 && (
+              <View style={styles.detailLine}>
+                <Text style={styles.detailLabel}>Custo interno da encadernação</Text>
+                <Text style={styles.detailValue}>
+                  {(item.custo_encadernacao ?? 0).toFixed(2)} MT
+                </Text>
+              </View>
+            )}
+            {item.estado === "Em impressão" &&
+              item.tipo_encadernacao.trim().toUpperCase() !== "SEM_ENCADERNACAO" &&
+              item.encadernacao_consumida !== 1 && (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={pedidoProcessando !== null || !item.remoto_id}
+                  style={[styles.bindingButton, (pedidoProcessando !== null || !item.remoto_id) && styles.actionButtonDisabled]}
+                  onPress={() => pedirInicioEncadernacao(item)}
+                >
+                  {pedidoProcessando === item.id
+                    ? <ActivityIndicator color={colors.surface} />
+                    : <><Ionicons name="book-outline" size={20} color={colors.surface} /><Text style={styles.advanceText}>Iniciar encadernação</Text></>}
+                </Pressable>
+              )}
             {item.estado !== "Entregue" && item.estado !== "Cancelado" && (
               <Pressable
                 disabled={
@@ -790,16 +901,54 @@ export default function PedidosScreen() {
   }
 
   return (
-    <FlatList
-      style={styles.container}
-      contentContainerStyle={[styles.content, isDesktop && { maxWidth: 1000, width: '100%', alignSelf: 'center' }]}
-      refreshControl={
-        <RefreshControl refreshing={atualizando} onRefresh={() => void carregarPedidos()} />
-      }
-      data={pedidosFiltrados}
-      keyExtractor={(item) => item.id.toString()}
-      renderItem={renderPedidoSimples}
-      ListHeaderComponent={
+    <>
+      <Modal
+        visible={pedidoSelecionadoEncadernacao !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPedidoSelecionadoEncadernacao(null)}
+      >
+        <View style={styles.spiralModalOverlay}>
+          <View style={styles.spiralModal}>
+            <Text style={styles.spiralModalTitle}>Escolha uma espiral compatível</Text>
+            <Text style={styles.spiralModalDescription}>
+              Só aparecem espirais com capacidade confirmada para {pedidoSelecionadoEncadernacao?.numero_copias ? Math.ceil(pedidoSelecionadoEncadernacao.folhas_necessarias / pedidoSelecionadoEncadernacao.numero_copias) : 0} folhas físicas por exemplar e stock para {pedidoSelecionadoEncadernacao?.numero_copias ?? 0} exemplar(es). Confirme também a embalagem física antes de escolher.
+            </Text>
+            <ScrollView style={styles.spiralOptionsList}>
+              {opcoesEspiral.map((espiral) => (
+                <Pressable
+                  accessibilityRole="button"
+                  key={espiral.id}
+                  style={styles.spiralOptionButton}
+                  onPress={() => selecionarEspiralEncadernacao(espiral)}
+                >
+                  <Text style={styles.spiralOptionTitle}>{espiral.name}</Text>
+                  <Text style={styles.spiralOptionDescription}>
+                    Capacidade: {espiral.minimumSheets}–{espiral.maximumSheets} folhas · Stock: {espiral.availableQuantity} unidade(s)
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.spiralCancelButton}
+              onPress={() => setPedidoSelecionadoEncadernacao(null)}
+            >
+              <Text style={styles.spiralCancelText}>Cancelar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+      <FlatList
+        style={styles.container}
+        contentContainerStyle={[styles.content, isDesktop && { maxWidth: 1000, width: '100%', alignSelf: 'center' }]}
+        refreshControl={
+          <RefreshControl refreshing={atualizando} onRefresh={() => void carregarPedidos()} />
+        }
+        data={pedidosFiltrados}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderPedidoSimples}
+        ListHeaderComponent={
         <View>
           <View style={styles.pageHeader}>
             <Text style={styles.title}>Pedidos</Text>
@@ -903,8 +1052,9 @@ export default function PedidosScreen() {
             </Pressable>
           )}
         </View>
-      }
-    />
+        }
+      />
+    </>
   );
 }
 
@@ -1225,6 +1375,68 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
     marginTop: 10,
+  },
+  bindingButton: {
+    minHeight: 48,
+    borderRadius: 11,
+    backgroundColor: colors.success,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 10,
+  },
+  spiralModalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    padding: spacing.lg,
+  },
+  spiralModal: {
+    maxHeight: "80%",
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
+  },
+  spiralModalTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: fontWeights.bold,
+  },
+  spiralModalDescription: {
+    color: colors.subtle,
+    lineHeight: 19,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  spiralOptionsList: {
+    flexGrow: 0,
+  },
+  spiralOptionButton: {
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  spiralOptionTitle: {
+    color: colors.brand,
+    fontWeight: fontWeights.bold,
+  },
+  spiralOptionDescription: {
+    color: colors.subtle,
+    fontSize: 12,
+    marginTop: spacing.xs,
+  },
+  spiralCancelButton: {
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: spacing.xs,
+  },
+  spiralCancelText: {
+    color: colors.danger,
+    fontWeight: fontWeights.bold,
   },
   privacyActionButton: {
     minHeight: 46,

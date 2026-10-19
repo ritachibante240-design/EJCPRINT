@@ -70,11 +70,30 @@ export class ConfigureInkStockDto {
   unitCostCents!: number;
 }
 
+export class ConfigureBindingCapacityDto {
+  @IsInt()
+  @Min(1)
+  @Max(100_000)
+  minimumSheets!: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(100_000)
+  maximumSheets!: number;
+}
+
 export class StartPrintDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(191)
   externalReference!: string;
+}
+
+export class StartBindingDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
+  spiralStockItemId!: string;
 }
 
 export class ApplyPrintCostDefaultsDto {

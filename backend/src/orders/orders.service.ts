@@ -131,6 +131,14 @@ export class OrdersService {
       include: {
         documents: true,
         payments: { select: { id: true, externalReference: true, amountCents: true, status: true } },
+        stockMovements: {
+          where: { type: 'CONSUMO_ENCADERNACAO' },
+          select: {
+            type: true,
+            amountCents: true,
+            stockItem: { select: { name: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -195,7 +203,17 @@ export class OrdersService {
   async findOne(id: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      include: { documents: true },
+      include: {
+        documents: true,
+        stockMovements: {
+          where: { type: 'CONSUMO_ENCADERNACAO' },
+          select: {
+            type: true,
+            amountCents: true,
+            stockItem: { select: { name: true } },
+          },
+        },
+      },
     });
     if (!order) throw new NotFoundException('Pedido não encontrado.');
     return order;
@@ -230,6 +248,17 @@ export class OrdersService {
       }
       if (status === 'DELIVERED' && confirmedCents < order.totalCents) {
         throw new BadRequestException('O pagamento total do pedido ainda não está confirmado.');
+      }
+      if (
+        status === 'READY_FOR_PICKUP' &&
+        order.bindingType.trim().toUpperCase() !== 'SEM_ENCADERNACAO'
+      ) {
+        const bindingConsumption = await transaction.stockMovement.count({
+          where: { orderId: order.id, type: 'CONSUMO_ENCADERNACAO' },
+        });
+        if (bindingConsumption === 0) {
+          throw new BadRequestException('Inicie e registe o consumo dos materiais de encadernação antes de marcar o pedido como pronto.');
+        }
       }
 
       const updatedOrder = await transaction.order.update({ where: { id }, data: { status } });

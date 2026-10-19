@@ -1,0 +1,74 @@
+{
+  "generatedAt": "2026-10-19T13:50:00Z",
+  "generatedOnPlatform": "win32",
+  "projectType": "server",
+  "setup": [
+    {
+      "command": "npm",
+      "args": [
+        "ci"
+      ],
+      "timeoutSeconds": 600
+    },
+    {
+      "command": "npm",
+      "args": [
+        "run",
+        "prisma:generate"
+      ],
+      "timeoutSeconds": 180
+    }
+  ],
+  "assertions": [
+    {
+      "name": "backend-build",
+      "kind": "process",
+      "command": "npm",
+      "args": [
+        "run",
+        "build"
+      ],
+      "verificationMethod": "exit-code",
+      "expected": "0",
+      "timeoutSeconds": 180
+    },
+    {
+      "name": "backend-typecheck",
+      "kind": "process",
+      "command": "npm",
+      "args": [
+        "run",
+        "typecheck"
+      ],
+      "verificationMethod": "exit-code",
+      "expected": "0",
+      "timeoutSeconds": 180
+    },
+    {
+      "name": "tests-pass",
+      "kind": "process",
+      "command": "npm",
+      "args": [
+        "test"
+      ],
+      "verificationMethod": "test-results",
+      "expected": "0",
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "privacy-policy-route",
+      "kind": "http-probe",
+      "startCommand": "npm",
+      "startArgs": [
+        "start"
+      ],
+      "env": {
+        "DATABASE_URL": "file:./dev.db"
+      },
+      "url": "http://127.0.0.1:3000/api/privacy",
+      "verificationMethod": "output-contains",
+      "expected": "Política de Privacidade da EJC Print",
+      "timeoutSeconds": 120
+    }
+  ]
+}

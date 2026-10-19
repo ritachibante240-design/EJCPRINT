@@ -24,27 +24,27 @@ model User {
 }
 
 model Order {
-  id                String      @id @default(cuid())
-  number            String      @unique
-  externalReference String?     @unique
+  id                String          @id @default(cuid())
+  number            String          @unique
+  externalReference String?         @unique
   clientId          String?
   customerName      String
   customerPhone     String
   service           String
-  instructions      String?     @db.Text
+  instructions      String?         @db.Text
   unitPriceCents    Int
   pageCount         Int
   copyCount         Int
-  doubleSided       Boolean     @default(false)
+  doubleSided       Boolean         @default(false)
   sheetsRequired    Int
-  bindingType       String      @default("SEM_ENCADERNACAO")
-  bindingPriceCents Int         @default(0)
+  bindingType       String          @default("SEM_ENCADERNACAO")
+  bindingPriceCents Int             @default(0)
   totalCents        Int
-  status            OrderStatus @default(RECEIVED)
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  status            OrderStatus     @default(RECEIVED)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
   documents         Document[]
-  client            User?       @relation(fields: [clientId], references: [id])
+  client            User?           @relation(fields: [clientId], references: [id])
   payments          Payment[]
   stockMovements    StockMovement[]
 
@@ -87,22 +87,24 @@ model Document {
 }
 
 model StockItem {
-  id              String          @id @default(cuid())
-  name            String
-  normalizedName  String          @unique
-  category        String
-  unit            String
-  quantity        Float           @default(0)
-  minimumQuantity Float           @default(0)
-  averageUnitCost Float           @default(0)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  movements       StockMovement[]
+  id               String          @id @default(cuid())
+  name             String
+  normalizedName   String          @unique
+  category         String
+  unit             String
+  quantity         Float           @default(0)
+  minimumQuantity  Float           @default(0)
+  averageUnitCost  Float           @default(0)
+  bindingMinSheets Int?
+  bindingMaxSheets Int?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  movements        StockMovement[]
 }
 
 model StockMovement {
-  id                String      @id @default(cuid())
-  externalReference String?     @unique
+  id                String    @id @default(cuid())
+  externalReference String?   @unique
   stockItemId       String
   orderId           String?
   type              String
@@ -111,10 +113,10 @@ model StockMovement {
   unitCost          Float?
   inkUnitCost       Float?
   reason            String?
-  createdAt         DateTime    @default(now())
+  createdAt         DateTime  @default(now())
   expense           Expense?
-  stockItem         StockItem   @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
-  order             Order?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  stockItem         StockItem @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  order             Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([stockItemId, createdAt])
   @@index([orderId])
@@ -127,9 +129,9 @@ model Expense {
   category          String
   type              String
   amountCents       Int
-  stockMovementId  String?        @unique
+  stockMovementId   String?        @unique
   createdAt         DateTime       @default(now())
-  stockMovement    StockMovement? @relation(fields: [stockMovementId], references: [id], onDelete: SetNull)
+  stockMovement     StockMovement? @relation(fields: [stockMovementId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([type, createdAt])
@@ -141,7 +143,7 @@ model AdminAuditLog {
   action     String
   entityType String
   entityId   String
-  summary    String    @db.Text
+  summary    String   @db.Text
   createdAt  DateTime @default(now())
 
   @@index([createdAt])

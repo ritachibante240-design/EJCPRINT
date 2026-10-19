@@ -27,6 +27,7 @@ import {
   registrarCompraStock,
   definirCustoUnitarioStock,
   configurarStockTinta,
+  configurarCapacidadeEspiral,
   aplicarCustosPadraoImpressao,
   ajustarQuantidadeStock,
   registrarDesperdicio,
@@ -65,6 +66,7 @@ export default function StockScreen() {
   const [modalDesperdicio, setModalDesperdicio] = useState(false);
   const [modalAjuste, setModalAjuste] = useState(false);
   const [modalConfigurarTinta, setModalConfigurarTinta] = useState(false);
+  const [modalCapacidadeEspiral, setModalCapacidadeEspiral] = useState(false);
   const [modalCalculadora, setModalCalculadora] = useState(false);
   const [itemSelecionado, setItemSelecionado] =
     useState<ItemStock | null>(null);
@@ -82,6 +84,8 @@ export default function StockScreen() {
   const [quantidadeFrascos, setQuantidadeFrascos] = useState('');
   const [minimoFrascos, setMinimoFrascos] = useState('');
   const [custoPorFrasco, setCustoPorFrasco] = useState('');
+  const [minimoFolhasEspiral, setMinimoFolhasEspiral] = useState('');
+  const [maximoFolhasEspiral, setMaximoFolhasEspiral] = useState('');
   const [quantidadeDesperdicio, setQuantidadeDesperdicio] = useState('');
   const [motivoDesperdicio, setMotivoDesperdicio] = useState('');
   const [quantidadeReal, setQuantidadeReal] = useState('');
@@ -103,6 +107,52 @@ export default function StockScreen() {
       console.error(erro);
       showAppAlert('Stock indisponível', erro instanceof Error ? erro.message : 'Não foi possível carregar o stock online.');
     }
+  }
+
+  function abrirConfiguracaoCapacidadeEspiral(item: ItemStock) {
+    setItemSelecionado(item);
+    setMinimoFolhasEspiral(item.capacidade_minima_folhas?.toString() ?? '');
+    setMaximoFolhasEspiral(item.capacidade_maxima_folhas?.toString() ?? '');
+    setModalCapacidadeEspiral(true);
+  }
+
+  async function guardarCapacidadeEspiral() {
+    if (processandoStock || !itemSelecionado) return;
+    const minimumSheets = Number(minimoFolhasEspiral);
+    const maximumSheets = Number(maximoFolhasEspiral);
+    if (
+      !Number.isSafeInteger(minimumSheets) ||
+      minimumSheets < 1 ||
+      !Number.isSafeInteger(maximumSheets) ||
+      maximumSheets < minimumSheets
+    ) {
+      showAppAlert('Capacidade inválida', 'Informe uma faixa inteira válida: mínimo maior que zero e máximo igual ou superior ao mínimo.');
+      return;
+    }
+    showAppAlert(
+      'Confirmar capacidade da espiral',
+      `A espiral “${itemSelecionado.nome}” será considerada compatível com documentos de ${minimumSheets} a ${maximumSheets} folhas físicas por exemplar. Use apenas os limites confirmados na embalagem ou pelo fornecedor.`,
+      [
+        { text: 'Voltar', style: 'cancel' },
+        {
+          text: 'Confirmar capacidade',
+          onPress: () => void (async () => {
+            try {
+              setProcessandoStock(true);
+              await configurarCapacidadeEspiral(itemSelecionado.id, minimumSheets, maximumSheets);
+              setModalCapacidadeEspiral(false);
+              setItemSelecionado(null);
+              await carregar();
+              showAppAlert('Compatibilidade guardada', 'A espiral só será apresentada em pedidos dentro desta faixa e com stock suficiente.');
+            } catch (erro) {
+              showAppAlert('Erro', erro instanceof Error ? erro.message : 'Não foi possível guardar a capacidade.');
+            } finally {
+              setProcessandoStock(false);
+            }
+          })(),
+        },
+      ],
+    );
   }
 
   useFocusEffect(
@@ -652,6 +702,24 @@ export default function StockScreen() {
         </View>
         <View style={styles.stockArea}><Text style={styles.stockNumber}>{item.quantidade.toLocaleString('pt-PT', { maximumFractionDigits: 6 })}</Text><Text style={styles.stockUnit}>{item.unidade}</Text></View>
         <Text style={styles.availableText}>disponíveis</Text>
+        {item.categoria.trim().toLocaleLowerCase() === 'encadernação' &&
+          item.nome.trim().toLocaleLowerCase().startsWith('espiral ') && (
+          <>
+            <Text style={styles.initialCostHint}>
+              {typeof item.capacidade_minima_folhas === 'number' && typeof item.capacidade_maxima_folhas === 'number'
+                ? `Capacidade confirmada: ${item.capacidade_minima_folhas}–${item.capacidade_maxima_folhas} folhas físicas por exemplar.`
+                : 'Sem capacidade confirmada. Esta espiral não será oferecida para nenhum pedido.'}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.initialCostButton}
+              onPress={() => abrirConfiguracaoCapacidadeEspiral(item)}
+            >
+              <Ionicons name="options-outline" size={18} color={colors.brand} />
+              <Text style={styles.initialCostText}>Configurar compatibilidade da espiral</Text>
+            </Pressable>
+          </>
+        )}
         {ehTintaEpson && (
           <Text style={styles.initialCostHint}>
             Stock único em frascos. Consumo estimado: 1/4.500 por página a preto e branco ou 3/7.500 por página a cores, mais 10% de reserva.
@@ -841,6 +909,9 @@ export default function StockScreen() {
             >
             <Text style={styles.modalTitle}>
               Novo material
+            </Text>
+            <Text style={{ color: colors.subtle, fontSize: 12, lineHeight: 18, marginBottom: spacing.md }}>
+              Cadastre as capas e espirais com a categoria Encadernação e unidade unidades. Espirais sem capacidade confirmada na embalagem/fornecedor não serão oferecidas nos pedidos.
             </Text>
 
             <Text style={styles.formLabel}>Nome do material</Text>
@@ -1144,6 +1215,42 @@ export default function StockScreen() {
               <ActionButton title="Guardar configuração" loading={processandoStock} onPress={pedirConfirmacaoConfiguracaoTinta} style={styles.confirmButton} />
             </View>
           </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal visible={modalCapacidadeEspiral} transparent animationType="slide" onRequestClose={() => setModalCapacidadeEspiral(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Compatibilidade da espiral</Text>
+                <Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setModalCapacidadeEspiral(false)}>
+                <Ionicons name="close" size={28} color={colors.brand} />
+              </Pressable>
+            </View>
+            <Text style={styles.initialCostHint}>
+              Preencha somente a capacidade real indicada na embalagem ou confirmada pelo fornecedor. O sistema compara com as folhas físicas que serão usadas no pedido; não existe valor padrão.
+            </Text>
+            <Text style={styles.inputLabel}>Mínimo de folhas físicas por exemplar</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="number-pad"
+              placeholder="Ex.: 1"
+              value={minimoFolhasEspiral}
+              onChangeText={setMinimoFolhasEspiral}
+            />
+            <Text style={styles.inputLabel}>Máximo de folhas físicas por exemplar</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="number-pad"
+              placeholder="Conforme embalagem/fornecedor"
+              value={maximoFolhasEspiral}
+              onChangeText={setMaximoFolhasEspiral}
+            />
+            <ActionButton title="Guardar capacidade confirmada" loading={processandoStock} onPress={guardarCapacidadeEspiral} style={styles.confirmButton} />
+          </View>
         </View>
       </Modal>
 

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
-import { AdjustStockDto, ConfigureInkStockDto, InitialStockCostDto, PurchaseStockDto, SetStockUnitCostDto, WasteStockDto } from './dto/stock-operation.dto';
+import { AdjustStockDto, ConfigureBindingCapacityDto, ConfigureInkStockDto, InitialStockCostDto, PurchaseStockDto, SetStockUnitCostDto, WasteStockDto } from './dto/stock-operation.dto';
 
 const PAPER_SERVICES = new Set([
   'Impressão P/B',
@@ -57,6 +57,23 @@ function estimateInkBottleConsumption(service: string, printedPages: number) {
   return Math.round(
     printedPages * bottlesPerPage * (1 + PRINT_COST_DEFAULTS.wasteReserveRate) * 1_000_000,
   ) / 1_000_000;
+}
+
+function bindingSheetsPerCopy(order: {
+  pageCount: number;
+  copyCount: number;
+  doubleSided: boolean;
+  sheetsRequired: number;
+}) {
+  if (!Number.isSafeInteger(order.pageCount) || order.pageCount < 1 ||
+      !Number.isSafeInteger(order.copyCount) || order.copyCount < 1) {
+    throw new BadRequestException('O número de páginas ou exemplares do pedido é inválido.');
+  }
+  const sheetsPerCopy = order.doubleSided ? Math.ceil(order.pageCount / 2) : order.pageCount;
+  if (sheetsPerCopy * order.copyCount !== order.sheetsRequired) {
+    throw new BadRequestException('O cálculo de folhas físicas do pedido está inconsistente. Atualize o pedido antes de encadernar.');
+  }
+  return sheetsPerCopy;
 }
 
 @Injectable()
@@ -356,6 +373,42 @@ export class InventoryService {
     });
   }
 
+  async configureBindingCapacity(stockItemId: string, input: ConfigureBindingCapacityDto, actor?: string) {
+    if (input.minimumSheets > input.maximumSheets) {
+      throw new BadRequestException('O mínimo de folhas não pode ser maior que o máximo.');
+    }
+    return this.prisma.$transaction(async (transaction) => {
+      const item = await transaction.stockItem.findUnique({ where: { id: stockItemId } });
+      if (!item) throw new NotFoundException('Material não encontrado.');
+      if (
+        item.category.trim().toLocaleLowerCase() !== 'encadernação' ||
+        !item.normalizedName.startsWith('espiral ')
+      ) {
+        throw new BadRequestException('A capacidade só pode ser configurada para materiais “Espiral …” da categoria Encadernação.');
+      }
+      if (!['unidade', 'unidades'].includes(item.unit.trim().toLocaleLowerCase())) {
+        throw new BadRequestException('A espiral deve estar controlada em unidades para poder ser usada na encadernação.');
+      }
+
+      const updated = await transaction.stockItem.update({
+        where: { id: item.id },
+        data: {
+          bindingMinSheets: input.minimumSheets,
+          bindingMaxSheets: input.maximumSheets,
+        },
+      });
+      await this.registarAuditoria(
+        transaction,
+        actor,
+        'STOCK_BINDING_CAPACITY_CONFIGURED',
+        'STOCK',
+        item.id,
+        `Capacidade confirmada de ${item.name}: ${input.minimumSheets}–${input.maximumSheets} folhas físicas por exemplar, conforme embalagem/fornecedor.`,
+      );
+      return updated;
+    });
+  }
+
   async configureInkStock(stockItemId: string, input: ConfigureInkStockDto, actor?: string) {
     const externalReference = input.externalReference.trim();
     if (!externalReference || !Number.isSafeInteger(input.unitCostCents)) {
@@ -542,6 +595,277 @@ export class InventoryService {
     });
   }
 
+  async bindingOptions(orderId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('Pedido não encontrado.');
+    if (order.status !== 'PRINTING') {
+      throw new BadRequestException('Consulte as espirais disponíveis depois de iniciar a impressão do pedido.');
+    }
+    if (order.bindingType.trim().toUpperCase() === 'SEM_ENCADERNACAO') {
+      throw new BadRequestException('Este pedido não tem encadernação.');
+    }
+    if (!Number.isSafeInteger(order.copyCount) || order.copyCount < 1) {
+      throw new BadRequestException('O número de exemplares do pedido é inválido.');
+    }
+    const requiredSheets = bindingSheetsPerCopy(order);
+    const [strongCover, transparentCover] = await Promise.all([
+      this.prisma.stockItem.findUnique({ where: { normalizedName: 'capa forte' } }),
+      this.prisma.stockItem.findUnique({ where: { normalizedName: 'capa transparente' } }),
+    ]);
+    for (const cover of [
+      { item: strongCover, label: 'Capa forte' },
+      { item: transparentCover, label: 'Capa transparente' },
+    ]) {
+      if (!cover.item) {
+        return {
+          requiredSheets,
+          copyCount: order.copyCount,
+          options: [],
+          blockReason: `Cadastre “${cover.label}” em unidades antes de iniciar a encadernação.`,
+        };
+      }
+      if (!['unidade', 'unidades'].includes(cover.item.unit.trim().toLocaleLowerCase())) {
+        return {
+          requiredSheets,
+          copyCount: order.copyCount,
+          options: [],
+          blockReason: `Configure “${cover.label}” para ser contado em unidades.`,
+        };
+      }
+      if (cover.item.quantity < order.copyCount) {
+        return {
+          requiredSheets,
+          copyCount: order.copyCount,
+          options: [],
+          blockReason: `Stock insuficiente de ${cover.label}: necessário ${order.copyCount}, disponível ${cover.item.quantity}.`,
+        };
+      }
+    }
+
+    const items = await this.prisma.stockItem.findMany({
+      where: {
+        bindingMinSheets: { not: null },
+        bindingMaxSheets: { not: null },
+        quantity: { gte: order.copyCount },
+      },
+      orderBy: [{ bindingMaxSheets: 'asc' }, { name: 'asc' }],
+    });
+    const compatible = items.filter((item) =>
+      item.category.trim().toLocaleLowerCase() === 'encadernação' &&
+      item.normalizedName.startsWith('espiral ') &&
+      ['unidade', 'unidades'].includes(item.unit.trim().toLocaleLowerCase()) &&
+      item.bindingMinSheets !== null &&
+      item.bindingMaxSheets !== null &&
+      item.bindingMinSheets <= requiredSheets &&
+      item.bindingMaxSheets >= requiredSheets,
+    );
+    return {
+      requiredSheets,
+      copyCount: order.copyCount,
+      blockReason: null,
+      options: compatible.map((item) => ({
+        id: item.id,
+        name: item.name,
+        availableQuantity: item.quantity,
+        minimumSheets: item.bindingMinSheets,
+        maximumSheets: item.bindingMaxSheets,
+      })),
+    };
+  }
+
+  async startBinding(orderId: string, spiralStockItemId: string, actor?: string) {
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const order = await transaction.order.findUnique({ where: { id: orderId } });
+        if (!order) throw new NotFoundException('Pedido não encontrado.');
+
+        const previous = await transaction.stockMovement.findMany({
+          where: { orderId, type: 'CONSUMO_ENCADERNACAO' },
+          include: { stockItem: true },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (previous.length > 0) {
+          const spiral = previous.find((movement) => movement.stockItem.normalizedName.startsWith('espiral '));
+          return {
+            consumed: true,
+            alreadyConsumed: true,
+            spiralName: spiral?.stockItem.name ?? null,
+            costCents: previous.reduce((total, movement) => total + (movement.amountCents ?? 0), 0),
+            materials: previous.map((movement) => ({
+              name: movement.stockItem.name,
+              quantity: movement.quantity,
+              unit: movement.stockItem.unit,
+              amountCents: movement.amountCents ?? 0,
+            })),
+          };
+        }
+
+        if (order.status !== 'PRINTING') {
+          throw new BadRequestException('Inicie a encadernação apenas depois de iniciar a impressão do pedido.');
+        }
+        if (order.bindingType.trim().toUpperCase() === 'SEM_ENCADERNACAO') {
+          throw new BadRequestException('Este pedido não tem encadernação.');
+        }
+
+        if (!Number.isSafeInteger(order.copyCount) || order.copyCount < 1) {
+          throw new BadRequestException('O número de exemplares do pedido é inválido.');
+        }
+        const requiredSheets = bindingSheetsPerCopy(order);
+        const spiral = await transaction.stockItem.findUnique({
+          where: { id: spiralStockItemId },
+        });
+        if (!spiral) throw new NotFoundException('A espiral selecionada não existe no stock.');
+        if (
+          spiral.category.trim().toLocaleLowerCase() !== 'encadernação' ||
+          !spiral.normalizedName.startsWith('espiral ')
+        ) {
+          throw new BadRequestException(
+            'O material selecionado não está identificado como espiral de encadernação.',
+          );
+        }
+        if (!['unidade', 'unidades'].includes(spiral.unit.trim().toLocaleLowerCase())) {
+          throw new BadRequestException('A espiral selecionada não está controlada em unidades.');
+        }
+        if (
+          spiral.bindingMinSheets === null ||
+          spiral.bindingMaxSheets === null ||
+          spiral.bindingMinSheets > requiredSheets ||
+          spiral.bindingMaxSheets < requiredSheets
+        ) {
+          throw new BadRequestException(
+            `A capacidade confirmada de “${spiral.name}” não cobre as ${requiredSheets} folhas físicas por exemplar deste pedido. Escolha uma opção compatível.`,
+          );
+        }
+        if (spiral.quantity < order.copyCount) {
+          throw new BadRequestException(
+            `Stock insuficiente de ${spiral.name}. Necessário: ${order.copyCount} unidade(s); disponível: ${spiral.quantity}.`,
+          );
+        }
+
+        const requiredItems: {
+          normalizedName: string | null;
+          label: string;
+          quantity: number;
+          item: Prisma.StockItemGetPayload<Record<string, never>> | null;
+        }[] = [
+          {
+            normalizedName: 'capa forte',
+            label: 'Capa forte',
+            quantity: order.copyCount,
+            item: null,
+          },
+          {
+            normalizedName: 'capa transparente',
+            label: 'Capa transparente',
+            quantity: order.copyCount,
+            item: null,
+          },
+          {
+            normalizedName: null,
+            label: spiral.name,
+            quantity: order.copyCount,
+            item: spiral,
+          },
+        ];
+        const items = await Promise.all(requiredItems.map(async (required) => {
+          const stockItem = required.item ?? await transaction.stockItem.findUnique({
+            where: { normalizedName: required.normalizedName ?? '' },
+          });
+          if (!stockItem) {
+            throw new BadRequestException(
+              `Cadastre no stock o material “${required.label}” com a unidade “unidades” antes de iniciar a encadernação.`,
+            );
+          }
+          if (!['unidade', 'unidades'].includes(stockItem.unit.trim().toLowerCase())) {
+            throw new BadRequestException(
+              `O material “${required.label}” deve estar controlado em unidades, não em ${stockItem.unit}.`,
+            );
+          }
+          if (stockItem.quantity < required.quantity) {
+            throw new BadRequestException(
+              `Stock insuficiente de ${required.label}. Necessário: ${required.quantity} unidade(s); disponível: ${stockItem.quantity}.`,
+            );
+          }
+          return { ...required, item: stockItem };
+        }));
+        const operationReference = `binding-${createHash('sha256').update(orderId).digest('hex')}`;
+
+        const materials = [];
+        for (const [index, required] of items.entries()) {
+          const reference = index === 0
+            ? `${operationReference}-anchor`
+            : `${operationReference}-${createHash('sha256').update(required.item.id).digest('hex').slice(0, 16)}`;
+          const amountCents = Math.round(required.quantity * required.item.averageUnitCost * 100);
+          const movement = await transaction.stockMovement.create({
+            data: {
+              externalReference: reference,
+              stockItemId: required.item.id,
+              orderId,
+              type: 'CONSUMO_ENCADERNACAO',
+              quantity: required.quantity,
+              unitCost: required.item.averageUnitCost,
+              amountCents,
+              reason: `Encadernação do pedido ${order.number} (${spiral.name}; capacidade confirmada ${spiral.bindingMinSheets}–${spiral.bindingMaxSheets} folhas físicas por exemplar; ${order.copyCount} exemplar(es)).`,
+            },
+          });
+          const update = await transaction.stockItem.updateMany({
+            where: { id: required.item.id, quantity: { gte: required.quantity } },
+            data: { quantity: { decrement: required.quantity } },
+          });
+          if (update.count !== 1) {
+            throw new BadRequestException(
+              `Stock insuficiente de ${required.label}. Atualize o stock e tente novamente.`,
+            );
+          }
+          materials.push({
+            name: required.item.name,
+            quantity: movement.quantity,
+            unit: required.item.unit,
+            amountCents,
+          });
+        }
+
+        const costCents = materials.reduce((total, material) => total + material.amountCents, 0);
+        await this.registarAuditoria(
+          transaction,
+          actor,
+          'ORDER_BINDING_STARTED',
+          'ORDER',
+          order.id,
+          `Pedido ${order.number}: encadernação iniciada com ${spiral.name}, capacidade confirmada ${spiral.bindingMinSheets}–${spiral.bindingMaxSheets} folhas físicas por exemplar, para ${order.copyCount} exemplar(es); custo interno ${costCents / 100} MT.`,
+        );
+        return {
+          consumed: true,
+          alreadyConsumed: false,
+          spiralName: spiral.name,
+          costCents,
+          materials,
+        };
+      }, { maxWait: 10_000, timeout: 20_000 });
+    } catch (error) {
+      if (!this.isUniqueViolation(error)) throw error;
+      const previous = await this.prisma.stockMovement.findMany({
+        where: { orderId, type: 'CONSUMO_ENCADERNACAO' },
+        include: { stockItem: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (previous.length === 0) throw error;
+      const spiral = previous.find((movement) => movement.stockItem.normalizedName.startsWith('espiral '));
+      return {
+        consumed: true,
+        alreadyConsumed: true,
+        spiralName: spiral?.stockItem.name ?? null,
+        costCents: previous.reduce((total, movement) => total + (movement.amountCents ?? 0), 0),
+        materials: previous.map((movement) => ({
+          name: movement.stockItem.name,
+          quantity: movement.quantity,
+          unit: movement.stockItem.unit,
+          amountCents: movement.amountCents ?? 0,
+        })),
+      };
+    }
+  }
+
   listExpenses() {
     return this.prisma.expense.findMany({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
   }
@@ -684,8 +1008,8 @@ export class InventoryService {
           totalCents: true,
           status: true,
           stockMovements: {
-            where: { type: 'CONSUMO_PEDIDO' },
-            select: { quantity: true, unitCost: true, inkUnitCost: true },
+            where: { type: { in: ['CONSUMO_PEDIDO', 'CONSUMO_ENCADERNACAO'] } },
+            select: { type: true, quantity: true, unitCost: true, inkUnitCost: true, amountCents: true },
           },
           payments: { where: { status: 'CONFIRMED', ...(dateFilter ? { confirmedAt: dateFilter } : {}) }, select: { amountCents: true } },
         },
@@ -704,17 +1028,21 @@ export class InventoryService {
     const saidasCents = expenses.reduce((sum, expense) => sum + expense.amountCents, 0);
     const custosDiretosCents = orders.reduce((sum, order) => {
       if (order.status === 'CANCELLED') return sum;
-      const material = order.stockMovements[0];
-      if (!material || !PAPER_SERVICES.has(order.service)) return sum;
-      const costs = calculatePrintCosts({
-        service: order.service,
-        pageCount: order.pageCount,
-        copyCount: order.copyCount,
-        sheetsRequired: order.sheetsRequired,
-        paperCostPerSheet: material.unitCost ?? 0,
-        inkBottleCost: material.inkUnitCost ?? PRINT_COST_DEFAULTS.blackInkBottleCost,
-      });
-      return sum + Math.round(costs.total * 100);
+      const printMaterial = order.stockMovements.find((movement) => movement.type === 'CONSUMO_PEDIDO');
+      const printCost = printMaterial && PAPER_SERVICES.has(order.service)
+        ? Math.round(calculatePrintCosts({
+          service: order.service,
+          pageCount: order.pageCount,
+          copyCount: order.copyCount,
+          sheetsRequired: order.sheetsRequired,
+          paperCostPerSheet: printMaterial.unitCost ?? 0,
+          inkBottleCost: printMaterial.inkUnitCost ?? PRINT_COST_DEFAULTS.blackInkBottleCost,
+        }).total * 100)
+        : 0;
+      const bindingCost = order.stockMovements
+        .filter((movement) => movement.type === 'CONSUMO_ENCADERNACAO')
+        .reduce((total, movement) => total + (movement.amountCents ?? 0), 0);
+      return sum + printCost + bindingCost;
     }, 0);
     const despesasOperacionaisCents = expenses
       .filter((expense) => expense.type !== 'COMPRA_STOCK')

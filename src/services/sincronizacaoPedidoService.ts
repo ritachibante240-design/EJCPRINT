@@ -26,9 +26,14 @@ type PedidoRemoto = {
   createdAt: string;
   documents?: { id: string; originalName: string }[];
   payments?: { id: string; externalReference: string | null; amountCents: number; status: string }[];
+  stockMovements?: {
+    type: string;
+    amountCents: number | null;
+    stockItem: { name: string };
+  }[];
 };
 
-type PedidoLocalSync = Pick<Pedido, 'id' | 'remoto_id' | 'sync_chave' | 'estado' | 'sincronizacao_estado' | 'documento_nome' | 'documento_uri' | 'documento_remoto_id' | 'instrucoes'>;
+type PedidoLocalSync = Pick<Pedido, 'id' | 'remoto_id' | 'sync_chave' | 'estado' | 'sincronizacao_estado' | 'documento_nome' | 'documento_uri' | 'documento_remoto_id' | 'instrucoes' | 'encadernacao_consumida' | 'espiral_encadernacao' | 'custo_encadernacao'>;
 type EstadoClienteRemoto = {
   id: string;
   status: EstadoPedidoRemoto;
@@ -199,7 +204,7 @@ export async function sincronizarPedidosPendentes() {
 async function guardarPedidoRemoto(pedido: PedidoRemoto) {
   const syncChave = pedido.externalReference ?? `pedido-remoto-${pedido.id}`;
   const existente = await db.getFirstAsync<PedidoLocalSync>(
-    'SELECT id, remoto_id, sync_chave, estado, sincronizacao_estado, documento_nome, documento_uri, documento_remoto_id, instrucoes FROM pedidos WHERE remoto_id = ? OR sync_chave = ? LIMIT 1',
+    'SELECT id, remoto_id, sync_chave, estado, sincronizacao_estado, documento_nome, documento_uri, documento_remoto_id, instrucoes, encadernacao_consumida, espiral_encadernacao, custo_encadernacao FROM pedidos WHERE remoto_id = ? OR sync_chave = ? LIMIT 1',
     pedido.id,
     syncChave
   );
@@ -215,6 +220,21 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
       ? `${obterUrlApi()}/orders/${pedido.id}/document`
       : existente?.documento_uri ?? null;
   const documentoNome = documentoRemoto?.originalName ?? existente?.documento_nome ?? null;
+  const movimentosEncadernacao = pedido.stockMovements?.filter(
+    (movement) => movement.type === 'CONSUMO_ENCADERNACAO',
+  );
+  const movimentoEspiral = movimentosEncadernacao?.find((movement) =>
+    movement.stockItem.name.trim().toLocaleLowerCase().startsWith('espiral '),
+  );
+  const encadernacaoConsumida = movimentosEncadernacao
+    ? (movimentosEncadernacao.length > 0 ? 1 : 0)
+    : (existente?.encadernacao_consumida ?? 0);
+  const espiralEncadernacao = movimentoEspiral
+    ? movimentoEspiral.stockItem.name
+    : existente?.espiral_encadernacao ?? null;
+  const custoEncadernacao = movimentosEncadernacao
+    ? movimentosEncadernacao.reduce((total, movement) => total + (movement.amountCents ?? 0), 0) / 100
+    : existente?.custo_encadernacao ?? 0;
   const valores = [
     pedido.number,
     pedido.customerName,
@@ -248,12 +268,15 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
         documento_uri = ?, documento_remoto_id = ?, numero_paginas = ?,
         numero_copias = ?, frente_verso = ?, folhas_necessarias = ?, valor_pago = ?,
         tipo_encadernacao = ?, preco_encadernacao = ?, sync_chave = ?, remoto_id = ?,
-        sincronizacao_estado = ?
+        sincronizacao_estado = ?, encadernacao_consumida = ?, espiral_encadernacao = ?, custo_encadernacao = ?
        WHERE id = ?`,
       ...valores,
       existente.sincronizacao_estado === 'PENDENTE' && existente.documento_uri && !existente.documento_remoto_id
         ? 'PENDENTE'
         : 'SINCRONIZADO',
+      encadernacaoConsumida,
+      espiralEncadernacao,
+      custoEncadernacao,
       existente.id
     );
     return;
@@ -265,9 +288,12 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
       data_criacao, documento_nome, documento_uri, documento_remoto_id, numero_paginas,
       numero_copias, frente_verso, folhas_necessarias,
       valor_pago, tipo_encadernacao, preco_encadernacao, sync_chave, remoto_id,
-      sincronizacao_estado
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO')`,
-    ...valores
+      sincronizacao_estado, encadernacao_consumida, espiral_encadernacao, custo_encadernacao
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO', ?, ?, ?)`,
+    ...valores,
+    encadernacaoConsumida,
+    espiralEncadernacao,
+    custoEncadernacao
   );
 }
 

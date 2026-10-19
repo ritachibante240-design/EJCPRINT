@@ -39,6 +39,9 @@ export type Pedido = {
   custo_papel_unitario: number;
   custo_tinta: number;
   custo_tinta_por_pagina: number;
+  encadernacao_consumida: number;
+  espiral_encadernacao: string | null;
+  custo_encadernacao: number;
   total: number;
   documento_nome: string | null;
   documento_uri: string | null;
@@ -62,6 +65,7 @@ export type ResumoPedido = {
   valorPendente: number;
   custoPapel: number;
   custoTinta: number;
+  custoEncadernacao: number;
   custosDiretos: number;
   margemAntesOutrosCustos: number;
 };
@@ -74,7 +78,8 @@ export function calcularResumoPedido(pedido: Pedido): ResumoPedido {
   const valorPendente = Math.max(valorPedido - valorRecebido, 0);
   const custoPapel = pedido.custo_papel ?? 0;
   const custoTinta = pedido.custo_tinta ?? 0;
-  const custosDiretos = custoPapel + custoTinta;
+  const custoEncadernacao = pedido.custo_encadernacao ?? 0;
+  const custosDiretos = custoPapel + custoTinta + custoEncadernacao;
 
   return {
     totalPaginasImpressas,
@@ -84,6 +89,7 @@ export function calcularResumoPedido(pedido: Pedido): ResumoPedido {
     valorPendente,
     custoPapel,
     custoTinta,
+    custoEncadernacao,
     custosDiretos,
     margemAntesOutrosCustos: valorPedido - custosDiretos,
   };
@@ -403,6 +409,7 @@ export async function iniciarImpressao(
     await sincronizarPedidoLocal(pedido);
     pedido = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', pedidoId);
   }
+
   if (!pedido?.remoto_id) {
     throw new Error('O pedido ainda não está sincronizado com o backend. Verifique a ligação e tente novamente.');
   }
@@ -497,6 +504,67 @@ export async function iniciarImpressao(
       pedidoId
     );
   });
+}
+
+export async function iniciarEncadernacao(pedidoId: number, spiralStockItemId: string) {
+  const pedido = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', pedidoId);
+  if (!pedido) throw new Error('Pedido não encontrado.');
+  if (!pedido.remoto_id) {
+    throw new Error('O pedido ainda não está sincronizado com o backend. Atualize a lista e tente novamente.');
+  }
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
+  if (!apiUrl) throw new Error('A URL do backend não está configurada.');
+  const token = await obterTokenAdministrador();
+  if (!token) throw new Error('Inicie sessão como administrador para iniciar a encadernação.');
+
+  const response = await fetch(
+    `${apiUrl}/inventory/orders/${encodeURIComponent(pedido.remoto_id)}/start-binding/confirm`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ spiralStockItemId }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    },
+  );
+  const body = await response.json().catch(() => null) as {
+    consumed?: boolean;
+    alreadyConsumed?: boolean;
+    spiralName?: string | null;
+    costCents?: number;
+    message?: unknown;
+  } | null;
+  if (!response.ok) {
+    throw new Error(typeof body?.message === 'string' ? body.message : `API respondeu ${response.status}.`);
+  }
+  if (
+    !body ||
+    body?.consumed !== true ||
+    typeof body.spiralName !== 'string' ||
+    !body.spiralName.trim() ||
+    typeof body.costCents !== 'number' ||
+    !Number.isSafeInteger(body.costCents) ||
+    body.costCents < 0
+  ) {
+    throw new Error('O backend não devolveu os dados válidos do consumo de encadernação. Atualize o backend e tente novamente.');
+  }
+
+  const spiralName = body.spiralName;
+  const costCents = body.costCents;
+  await executarTransacaoLocal(async (transaction) => {
+    await transaction.runAsync(
+      `UPDATE pedidos
+       SET encadernacao_consumida = 1, espiral_encadernacao = ?, custo_encadernacao = ?,
+           sincronizacao_estado = 'SINCRONIZADO', sincronizacao_erro = NULL
+       WHERE id = ?`,
+      spiralName,
+      costCents / 100,
+      pedidoId,
+    );
+  });
+  return {
+    alreadyConsumed: body.alreadyConsumed === true,
+    spiralName,
+    cost: costCents / 100,
+  };
 }
 
 export type EstatisticasPedidos = {

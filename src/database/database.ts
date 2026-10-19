@@ -110,6 +110,9 @@ export async function iniciarBancoDados() {
       frente_verso INTEGER NOT NULL DEFAULT 0,
       folhas_necessarias INTEGER NOT NULL DEFAULT 1,
       stock_descontado INTEGER NOT NULL DEFAULT 0,
+      encadernacao_consumida INTEGER NOT NULL DEFAULT 0,
+      espiral_encadernacao TEXT,
+      custo_encadernacao REAL NOT NULL DEFAULT 0,
       sync_chave TEXT,
       remoto_id TEXT,
       sincronizacao_estado TEXT NOT NULL DEFAULT 'PENDENTE',
@@ -497,6 +500,9 @@ export async function iniciarBancoDados() {
   try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN sincronizacao_erro TEXT`); } catch {}
   try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN documento_remoto_id TEXT`); } catch {}
   try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN instrucoes TEXT`); } catch {}
+  try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN encadernacao_consumida INTEGER NOT NULL DEFAULT 0`); } catch {}
+  try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN espiral_encadernacao TEXT`); } catch {}
+  try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN custo_encadernacao REAL NOT NULL DEFAULT 0`); } catch {}
 
   const chaveMigracao = 'MIGRAR_PAGAMENTOS_ANTIGOS_V1';
   const migracao = await db.getFirstAsync<{ chave: string }>('SELECT chave FROM migracoes WHERE chave = ?', chaveMigracao);

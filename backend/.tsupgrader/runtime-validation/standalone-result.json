@@ -1,0 +1,145 @@
+{
+  "planHash": "49cba1b7a6ef15a95832ac1208181a105dd228cb5e18c08f44504d8a5423cebf",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-10-19T14:07:03.5238154Z",
+  "retryCount": 3,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 99822,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "backend-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E ejcprint-backend@0.1.0 build\r\n\u003E nest build\r\n\r\n",
+        "durationMs": 23598
+      },
+      {
+        "name": "backend-typecheck",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E ejcprint-backend@0.1.0 typecheck\r\n\u003E tsc --noEmit\r\n\r\n",
+        "durationMs": 2185
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E ejcprint-backend@0.1.0 test\r\n\u003E vitest run\r\n\r\n\r\n\u001B[1m\u001B[46m RUN \u001B[49m\u001B[22m \u001B[36mv3.2.7 \u001B[39m\u001B[90mC:/Users/HP EliteBook 650/OneDrive/Documentos/EJCPrintGestao/backend\u001B[39m\r\n\r\n \u001B[32m\u2713\u001B[39m test/orders.service.spec.ts \u001B[2m(\u001B[22m\u001B[2m2 tests\u001B[22m\u001B[2m)\u001B[22m\u001B[32m 38\u001B[2mms\u001B[22m\u001B[39m\r\n \u001B[32m\u2713\u001B[39m test/payments.service.spec.ts \u001B[2m(\u001B[22m\u001B[2m2 tests\u001B[22m\u001B[2m)\u001B[22m\u001B[32m 34\u001B[2mms\u001B[22m\u001B[39m\r\n \u001B[32m\u2713\u001B[39m test/inventory.service.spec.ts \u001B[2m(\u001B[22m\u001B[2m2 tests\u001B[22m\u001B[2m)\u001B[22m\u001B[32m 14\u001B[2mms\u001B[22m\u001B[39m\r\n\r\n\u001B[2m Test Files \u001B[22m \u001B[1m\u001B[32m3 passed\u001B[39m\u001B[22m\u001B[90m (3)\u001B[39m\r\n\u001B[2m      Tests \u001B[22m \u001B[1m\u001B[32m6 passed\u001B[39m\u001B[22m\u001B[90m (6)\u001B[39m\r\n\u001B[2m   Start at \u001B[22m 16:06:42\r\n\u001B[2m   Duration \u001B[22m 5.24s\u001B[2m (transform 235ms, setup 0ms, collect 13.45s, tests 86ms, environment 0ms, prepare 1.09s)\u001B[22m\r\n\r\n",
+        "durationMs": 6646,
+        "testResults": {
+          "testFramework": "vitest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 6,
+          "testsPassed": 6,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": false
+        }
+      },
+      {
+        "name": "privacy-policy-route",
+        "kind": "http-probe",
+        "verificationMethod": "output-contains",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\r\n\u003Chtml lang=\u0022pt\u0022\u003E\r\n  \u003Chead\u003E\r\n    \u003Cmeta charset=\u0022utf-8\u0022\u003E\r\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1\u0022\u003E\r\n    \u003Cmeta name=\u0022robots\u0022 content=\u0022index,follow\u0022\u003E\r\n    \u003Ctitle\u003EPol\u00EDtica de Privacidade \u2014 EJC Print\u003C/title\u003E\r\n    \u003Cstyle\u003E\r\n      :root { color-scheme: light; font-family: Arial, sans-serif; color: #243b53; background: #f5f7fa; }\r\n      body { margin: 0; padding: 24px 16px; }\r\n      main { box-sizing: border-box; max-width: 780px; margin: 0 auto; padding: 28px; background: #fff; border: 1px solid #e6eaf0; border-radius: 16px; }\r\n      h1, h2 { color: #102a43; }\r\n      h1 { margin-top: 0; font-size: 28px; }\r\n      h2 { margin-top: 28px; font-size: 19px; }\r\n      p, li { font-size: 16px; line-height: 1.65; }\r\n      a { color: #1d4ed8; overflow-wrap: anywhere; }\r\n      .updated { color: #627d98; }\r\n      @media (max-width: 480px) { body { padding: 12px; } main { padding: 20px 16px; } h1 { font-size: 24px; } }\r\n    \u003C/style\u003E\r\n  \u003C/head\u003E\r\n  \u003Cbody\u003E\r\n    \u003Cmain\u003E\r\n      \u003Ch1\u003EPol\u00EDtica de Privacidade da EJC Print\u003C/h1\u003E\r\n      \u003Cp class=\u0022updated\u0022\u003E\u00DAltima atualiza\u00E7\u00E3o: 17 de outubro de 2026\u003C/p\u003E\r\n\r\n      \u003Cp\u003EEsta pol\u00EDtica explica como a EJC Print trata dados pessoais quando utiliza a aplica\u00E7\u00E3o EJC Print e os servi\u00E7os associados para receber e gerir pedidos de impress\u00E3o. A aplica\u00E7\u00E3o \u00E9 operada por \u003Cstrong\u003EEdvismaldin Joao Chibante\u003C/strong\u003E, em Sofala, Mo\u00E7ambique (\u201CEJC Print\u201D, \u201Cn\u00F3s\u201D).\u003C/p\u003E\r\n\r\n      \u003Ch2\u003EDados que tratamos\u003C/h2\u003E\r\n      \u003Cul\u003E\r\n        \u003Cli\u003E\u003Cstrong\u003EDados do pedido:\u003C/strong\u003E nome e contacto fornecidos pelo cliente, servi\u00E7o escolhido, quantidade de p\u00E1ginas e c\u00F3pias, op\u00E7\u00F5es de impress\u00E3o e encaderna\u00E7\u00E3o, pre\u00E7o, estado do pedido e instru\u00E7\u00F5es opcionais.\u003C/li\u003E\r\n        \u003Cli\u003E\u003Cstrong\u003EDocumentos enviados:\u003C/strong\u003E ficheiros do pedido, incluindo o nome original, formato e tamanho do ficheiro, para preparar o servi\u00E7o solicitado.\u003C/li\u003E\r\n        \u003Cli\u003E\u003Cstrong\u003EDados de pagamento:\u003C/strong\u003E valor, m\u00E9todo e tipo de pagamento, refer\u00EAncia fornecida e comprovativo enviado para an\u00E1lise. A aplica\u00E7\u00E3o regista estas informa\u00E7\u00F5es para a EJC Print verificar e acompanhar o pagamento; n\u00E3o pede credenciais banc\u00E1rias nem dados de cart\u00F5es de pagamento.\u003C/li\u003E\r\n        \u003Cli\u003E\u003Cstrong\u003EDados administrativos:\u003C/strong\u003E nome e endere\u00E7o de e-mail de contas administrativas, informa\u00E7\u00E3o de autentica\u00E7\u00E3o guardada como hash e dados tempor\u00E1rios necess\u00E1rios \u00E0 recupera\u00E7\u00E3o da palavra-passe. A \u00E1rea administrativa \u00E9 destinada \u00E0 gest\u00E3o da EJC Print.\u003C/li\u003E\r\n        \u003Cli\u003E\u003Cstrong\u003EDados guardados no dispositivo:\u003C/strong\u003E a aplica\u00E7\u00E3o pode manter localmente informa\u00E7\u00E3o de pedidos e sincroniza\u00E7\u00E3o para permitir o seu funcionamento. Os administradores tamb\u00E9m podem exportar backups e escolher onde os guardar.\u003C/li\u003E\r\n      \u003C/ul\u003E\r\n\r\n      \u003Ch2\u003EFinalidades\u003C/h2\u003E\r\n      \u003Cp\u003EUsamos os dados para receber e preparar pedidos, calcular valores, contactar o cliente sobre o servi\u00E7o, acompanhar estados, registar e verificar pagamentos, prestar apoio, proteger a aplica\u00E7\u00E3o contra uso indevido e cumprir obriga\u00E7\u00F5es contabil\u00EDsticas ou legais aplic\u00E1veis.\u003C/p\u003E\r\n\r\n      \u003Ch2\u003EOnde os dados s\u00E3o guardados e com quem s\u00E3o partilhados\u003C/h2\u003E\r\n      \u003Cp\u003EOs dados necess\u00E1rios ao servi\u00E7o s\u00E3o tratados na aplica\u00E7\u00E3o e no backend da EJC Print. Em produ\u00E7\u00E3o, o backend \u00E9 alojado no Render, a base de dados MySQL \u00E9 fornecida pela Aiven e os documentos e comprovativos s\u00E3o guardados num bucket privado do Cloudflare R2. O fornecedor de e-mail configurado pela EJC Print pode processar o endere\u00E7o de e-mail de um administrador quando envia um c\u00F3digo de recupera\u00E7\u00E3o de palavra-passe.\u003C/p\u003E\r\n      \u003Cp\u003EO acesso aos pedidos e comprovativos \u00E9 disponibilizado aos administradores autorizados para gerir o servi\u00E7o. Estes fornecedores tratam dados na medida necess\u00E1ria para fornecer infraestrutura, armazenamento ou envio de e-mail, de acordo com os respetivos servi\u00E7os e condi\u00E7\u00F5es. A infraestrutura pode processar dados em centros de dados localizados fora de Mo\u00E7ambique.\u003C/p\u003E\r\n      \u003Cp\u003EN\u00E3o vendemos dados pessoais. A aplica\u00E7\u00E3o n\u00E3o integra publicidade comportamental.\u003C/p\u003E\r\n\r\n      \u003Ch2\u003EConserva\u00E7\u00E3o dos dados\u003C/h2\u003E\r\n      \u003Cp\u003EN\u00E3o existe atualme\n\u2026[truncated]",
+        "durationMs": 15462
+      }
+    ],
+    "executions": [
+      {
+        "source": "setup[0]",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "ci"
+        ],
+        "cwd": "C:\\Users\\HP EliteBook 650\\OneDrive\\Documentos\\EJCPrintGestao\\backend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "setup[1]",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "prisma:generate"
+        ],
+        "cwd": "C:\\Users\\HP EliteBook 650\\OneDrive\\Documentos\\EJCPrintGestao\\backend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "backend-build",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "C:\\Users\\HP EliteBook 650\\OneDrive\\Documentos\\EJCPrintGestao\\backend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "backend-typecheck",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "typecheck"
+        ],
+        "cwd": "C:\\Users\\HP EliteBook 650\\OneDrive\\Documentos\\EJCPrintGestao\\backend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "test"
+        ],
+        "cwd": "C:\\Users\\HP EliteBook 650\\OneDrive\\Documentos\\EJCPrintGestao\\backend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "privacy-policy-route",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "start"
+        ],
+        "cwd": "C:\\Users\\HP EliteBook 650\\OneDrive\\Documentos\\EJCPrintGestao\\backend",
+        "env": {
+          "DATABASE_URL": "file:./dev.db"
+        },
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}
