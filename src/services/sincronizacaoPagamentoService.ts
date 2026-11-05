@@ -1,6 +1,8 @@
 import { db, executarTransacaoLocal } from '../database/database';
 import { fetch as expoFetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
+import { Platform } from 'react-native';
+import { ehDocumentoWeb, lerDocumentoWeb } from '../utils/webDocumentStore';
 import { sincronizarPedidosPendentes, sincronizarPedidosRecebidos } from './sincronizacaoPedidoService';
 import { obterTokenAdministrador } from './adminAuthService';
 import type { MetodoPagamento, Pagamento, TipoPagamento } from './pagamentoService';
@@ -40,9 +42,23 @@ function mensagemErro(erro: unknown) {
   return erro instanceof Error ? erro.message.slice(0, 240) : 'Falha de sincronização do pagamento.';
 }
 
-function obterComprovativoLocal(pagamento: Pagamento) {
-  if (!pagamento.comprovativo_uri || /^https?:\/\//i.test(pagamento.comprovativo_uri)) return null;
-  const proof = new File(pagamento.comprovativo_uri);
+async function obterComprovativoLocal(pagamento: Pagamento): Promise<Blob | File | null> {
+  const uri = pagamento.comprovativo_uri;
+  if (!uri || /^https?:\/\//i.test(uri)) return null;
+
+  if (Platform.OS === 'web') {
+    // No navegador não existe o File do expo-file-system: o comprovativo está
+    // guardado como data:/blob: ou na IndexedDB (web-doc:).
+    try {
+      if (ehDocumentoWeb(uri)) return (await lerDocumentoWeb(uri))?.blob ?? null;
+      const resposta = await fetch(uri);
+      return resposta.ok ? await resposta.blob() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const proof = new File(uri);
   return proof.exists ? proof : null;
 }
 
@@ -124,7 +140,7 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
         await db.runAsync('UPDATE pagamentos SET sync_chave = ? WHERE id = ?', externalReference, pagamento.id);
       }
 
-      const proof = obterComprovativoLocal(pagamento);
+      const proof = await obterComprovativoLocal(pagamento);
       const adminConfirmedWithoutProof =
         pagamento.status === 'CONFIRMADO' &&
         pagamento.metodo !== 'Dinheiro' &&
@@ -157,7 +173,13 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
         formData.append('method', pagamento.metodo as MetodoPagamento);
         formData.append('type', pagamento.tipo as TipoPagamento);
         if (pagamento.referencia) formData.append('reference', pagamento.referencia);
-        if (proof) formData.append('proof', proof);
+        if (proof) {
+          if (Platform.OS === 'web') {
+            formData.append('proof', proof as Blob, pagamento.comprovativo_nome ?? 'comprovativo');
+          } else {
+            formData.append('proof', proof as File);
+          }
+        }
         body = formData;
       }
       const resposta = await fetchComTimeout(endpoint, { method: 'POST', headers, body }, expoFetch);
@@ -228,7 +250,7 @@ export async function sincronizarPagamentosPendentes() {
      WHERE status = 'PENDENTE' AND remoto_id IS NULL AND metodo != 'Dinheiro'`
   );
   for (const pagamento of pagamentosSemComprovativo) {
-    if (obterComprovativoLocal(pagamento)) continue;
+    if (await obterComprovativoLocal(pagamento)) continue;
     const motivo = 'Comprovativo não encontrado neste dispositivo. Envie novamente o pagamento com o comprovativo.';
     await db.runAsync(
       `UPDATE pagamentos

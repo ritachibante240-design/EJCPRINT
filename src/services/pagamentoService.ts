@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { db, executarTransacaoLocal } from '../database/database';
 import { sincronizarPagamentoLocal } from './sincronizacaoPagamentoService';
 import { obterTokenAdministrador } from './adminAuthService';
@@ -153,6 +154,19 @@ export async function registrarPagamentoDinheiro(pedidoId: number, valor: number
   return registrarPagamento(pedidoId, valor, 'Dinheiro', undefined, tipo);
 }
 
+async function converterBlobUrlEmDataUrl(uri: string): Promise<string> {
+  const blob = await (await fetch(uri)).blob();
+  return await new Promise<string>((resolver, rejeitar) => {
+    const leitor = new FileReader();
+    leitor.onload = () =>
+      typeof leitor.result === 'string'
+        ? resolver(leitor.result)
+        : rejeitar(new Error('Não foi possível ler o comprovativo.'));
+    leitor.onerror = () => rejeitar(leitor.error ?? new Error('Não foi possível ler o comprovativo.'));
+    leitor.readAsDataURL(blob);
+  });
+}
+
 export async function enviarPagamento(
   pedidoId: number,
   valor: number,
@@ -170,6 +184,10 @@ export async function enviarPagamento(
   if (falta <= 0) throw new Error('Este pedido já está totalmente pago.');
   if (valor > falta) throw new Error(`Faltam apenas ${falta.toFixed(2)} MT.`);
   if (metodo !== 'Dinheiro' && !comprovativoUri) throw new Error('Anexe o comprovativo do pagamento.');
+  if (Platform.OS === 'web' && comprovativoUri?.startsWith('blob:')) {
+    // Endereços blob: deixam de existir quando a página é recarregada; guardamos o conteúdo.
+    comprovativoUri = await converterBlobUrlEmDataUrl(comprovativoUri);
+  }
   const pagamentoPendente = await db.getFirstAsync<{ id: number; valor: number }>(
     `SELECT id, valor FROM pagamentos WHERE pedido_id = ? AND status = 'PENDENTE' LIMIT 1`,
     pedidoId

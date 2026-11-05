@@ -1,8 +1,10 @@
 import { db, executarTransacaoLocal } from '../database/database';
 import { fetch as expoFetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
+import { Platform } from 'react-native';
 import { obterTokenAdministrador } from './adminAuthService';
 import type { Pedido } from './pedidoService';
+import { ehDocumentoWeb, lerDocumentoWeb } from '../utils/webDocumentStore';
 
 type EstadoPedidoRemoto = 'RECEIVED' | 'PREPARING' | 'PRINTING' | 'READY_FOR_PICKUP' | 'DELIVERED' | 'CANCELLED';
 
@@ -146,10 +148,18 @@ export async function sincronizarPedidoLocal(pedido: Pedido) {
 
     if (pedido.documento_uri && !pedido.documento_remoto_id) {
       const body = new FormData();
-      if (pedido.documento_uri.startsWith('data:')) {
+      if (ehDocumentoWeb(pedido.documento_uri)) {
+        const guardado = await lerDocumentoWeb(pedido.documento_uri);
+        if (!guardado) throw new Error('O documento do pedido não está disponível neste navegador.');
+        body.append('document', guardado.blob, pedido.documento_nome ?? guardado.nome);
+      } else if (pedido.documento_uri.startsWith('data:')) {
         const respostaArquivo = await fetch(pedido.documento_uri);
         const arquivo = await respostaArquivo.blob();
         body.append('document', arquivo, pedido.documento_nome ?? 'documento');
+      } else if (Platform.OS === 'web') {
+        const respostaArquivo = await fetch(pedido.documento_uri).catch(() => null);
+        if (!respostaArquivo?.ok) throw new Error('O documento do pedido não está disponível neste navegador.');
+        body.append('document', await respostaArquivo.blob(), pedido.documento_nome ?? 'documento');
       } else {
         const arquivo = new File(pedido.documento_uri);
         if (!arquivo.exists) throw new Error('O documento do pedido não está disponível neste dispositivo.');

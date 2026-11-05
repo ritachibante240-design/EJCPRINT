@@ -2,7 +2,8 @@ import { showAppAlert } from "../../components/AppAlert";
 import TextInput from "../../components/AppTextInput";
 import { colors, fontWeights, radii, spacing } from '../../theme';
 import { abrirPoliticaPrivacidade } from '../../utils/privacyPolicy';
-import React, { Fragment, useMemo, useState } from "react";
+import { guardarDocumentoWeb } from "../../utils/webDocumentStore";
+import React, { Fragment, useMemo, useRef, useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
 import { Directory, File, Paths } from "expo-file-system";
 import * as FileSystemLegacy from "expo-file-system/legacy";
@@ -84,6 +85,8 @@ function Progresso({ etapa }: { etapa: number }) {
 export default function NovoPedidoScreen({ navigation }: any) {
   const { isDesktop } = useResponsiveContent(20);
   const [etapa, setEtapa] = useState(1);
+  const [salvando, setSalvando] = useState(false);
+  const salvandoRef = useRef(false);
   const [tipoEncadernacao, setTipoEncadernacao] = useState("SEM_ENCADERNACAO");
   const [servicoSelecionado, setServicoSelecionado] = useState<Servico | null>(
     null,
@@ -180,15 +183,8 @@ export default function NovoPedidoScreen({ navigation }: any) {
       if (!arquivo.file) {
         throw new Error("Não foi possível ler o documento selecionado no navegador.");
       }
-      return new Promise<string>((resolve, reject) => {
-        const leitor = new FileReader();
-        leitor.onload = () => {
-          if (typeof leitor.result === "string") resolve(leitor.result);
-          else reject(new Error("Não foi possível guardar o documento no navegador."));
-        };
-        leitor.onerror = () => reject(leitor.error ?? new Error("Não foi possível ler o documento selecionado."));
-        leitor.readAsDataURL(arquivo.file!);
-      });
+      // Guarda o ficheiro diretamente na IndexedDB (rápido, sem converter para base64).
+      return await guardarDocumentoWeb(arquivo.file, nomeOriginal);
     }
 
     const diretorio = new Directory(Paths.document, "documentos-pedidos");
@@ -227,6 +223,8 @@ export default function NovoPedidoScreen({ navigation }: any) {
     setEtapa(3);
   }
   async function salvarPedido() {
+    // Evita criar pedidos duplicados com cliques repetidos enquanto o pedido é guardado.
+    if (salvandoRef.current) return;
     if (!cliente.trim()) return showAppAlert("Atenção", "Informe o seu nome.");
     if (!contacto.trim())
       return showAppAlert("Atenção", "Informe o seu contacto.");
@@ -237,6 +235,8 @@ export default function NovoPedidoScreen({ navigation }: any) {
         "Encadernação por cotar",
         "Para mais de 200 folhas por exemplar, peça ao administrador uma cotação antes de confirmar o pedido.",
       );
+    salvandoRef.current = true;
+    setSalvando(true);
     try {
       const documentoUri = documento?.uri;
       const p = await criarPedido({
@@ -295,6 +295,9 @@ export default function NovoPedidoScreen({ navigation }: any) {
           ? erro.message
           : "Não foi possível guardar o pedido.",
       );
+    } finally {
+      salvandoRef.current = false;
+      setSalvando(false);
     }
   }
   return (
@@ -429,7 +432,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
               keyboardType="number-pad"
               value={numeroPaginas}
               onChangeText={setNumeroPaginas}
-              placeholder="Ex.: 25"
+              placeholder="quantidade de páginas"
             />
             <Text style={styles.label}>Quantas cópias?</Text>
             <View style={styles.counter}>
@@ -594,7 +597,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
             <Text style={styles.sectionTitle}>Seus dados</Text>
             <TextInput
               style={styles.input}
-              placeholder="Nome"
+              placeholder="Nome Completo"
               value={cliente}
               onChangeText={setCliente}
             />
@@ -617,13 +620,19 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 <Text style={styles.privacyNoticeLink}>Leia a Política de Privacidade.</Text>
               </Pressable>
             </View>
-            <Pressable style={styles.primary} onPress={salvarPedido}>
+            <Pressable
+              style={[styles.primary, salvando && styles.disabled]}
+              onPress={salvarPedido}
+              disabled={salvando}
+            >
               <Ionicons
-                name="checkmark-circle-outline"
+                name={salvando ? "hourglass-outline" : "checkmark-circle-outline"}
                 size={22}
                 color="#FFF"
               />
-              <Text style={styles.primaryText}>Confirmar pedido</Text>
+              <Text style={styles.primaryText}>
+                {salvando ? "A guardar pedido..." : "Confirmar pedido"}
+              </Text>
             </Pressable>
             <Pressable style={styles.edit} onPress={() => setEtapa(2)}>
               <Text>Voltar e alterar</Text>

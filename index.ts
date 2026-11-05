@@ -1,3 +1,5 @@
+// Tem de ser o primeiro import: instala as novas tentativas de rede na web.
+import './src/utils/webFetchRetry';
 import './src/utils/secureStorePolyfill';
 import { registerRootComponent } from 'expo';
 

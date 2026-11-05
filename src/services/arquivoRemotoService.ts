@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
 import * as Sharing from 'expo-sharing';
+import { ehDocumentoWeb, lerDocumentoWeb } from '../utils/webDocumentStore';
 
 function nomeSeguro(nome: string) {
   return nome.replace(/[\\/:*?"<>|\r\n]/g, '_') || 'documento';
@@ -19,6 +20,13 @@ function descarregarWeb(dados: Blob, nome: string) {
 }
 
 export async function abrirArquivoPedido(uri: string, nome: string, mimeType: string, token?: string | null) {
+  if (Platform.OS === 'web' && ehDocumentoWeb(uri)) {
+    const guardado = await lerDocumentoWeb(uri);
+    if (!guardado) throw new Error('O documento não está disponível neste navegador.');
+    descarregarWeb(new Blob([guardado.blob], { type: mimeType }), nome);
+    return;
+  }
+
   if (Platform.OS === 'web' && !uri.startsWith('http')) {
     descarregarWeb(new Blob([await (await fetch(uri)).blob()], { type: mimeType }), nome);
     return;
