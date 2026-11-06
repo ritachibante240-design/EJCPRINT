@@ -4,7 +4,7 @@ import { File } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { obterTokenAdministrador } from './adminAuthService';
 import type { Pedido } from './pedidoService';
-import { ehDocumentoWeb, lerDocumentoWeb } from '../utils/webDocumentStore';
+import { ehDocumentoWeb, lerDocumentoWeb, removerDocumentoWeb } from '../utils/webDocumentStore';
 
 type EstadoPedidoRemoto = 'RECEIVED' | 'PREPARING' | 'PRINTING' | 'READY_FOR_PICKUP' | 'DELIVERED' | 'CANCELLED';
 
@@ -38,6 +38,7 @@ type PedidoRemoto = {
 type PedidoLocalSync = Pick<Pedido, 'id' | 'remoto_id' | 'sync_chave' | 'estado' | 'sincronizacao_estado' | 'documento_nome' | 'documento_uri' | 'documento_remoto_id' | 'instrucoes' | 'encadernacao_consumida' | 'espiral_encadernacao' | 'custo_encadernacao'>;
 type EstadoClienteRemoto = {
   id: string;
+  number?: string;
   status: EstadoPedidoRemoto;
   payments: {
     id: string;
@@ -86,6 +87,12 @@ function obterUrlApi() {
 function mensagemErro(erro: unknown) {
   return erro instanceof Error ? erro.message.slice(0, 240) : 'Falha de sincronização.';
 }
+
+// Troca o número provisório pelo número do servidor, exceto se outro registo local
+// já o usar (a coluna é única). Parâmetros, por ordem: número, número, id do pedido, número.
+const SQL_NUMERO_DO_SERVIDOR = `CASE
+  WHEN ? IS NULL OR EXISTS (SELECT 1 FROM pedidos AS outro WHERE outro.numero = ? AND outro.id != ?) THEN numero
+  ELSE (SELECT ?) END`;
 
 /**
  * Erro que não se resolve a tentar outra vez (o servidor recusou os dados de forma
@@ -175,14 +182,20 @@ async function sincronizarPedidoLocalSemConcorrencia(pedido: Pedido) {
       });
 
       if (!resposta.ok) throw await erroDaRespostaApi(resposta);
-      const remoto = (await resposta.json()) as { id: string };
+      const remoto = (await resposta.json()) as { id: string; number?: string };
       if (!remoto.id) throw new Error('A API não retornou o identificador do pedido.');
       remotoId = remoto.id;
+      // Passa a mostrar o número oficial do servidor (ex.: EJC-2026-38BE1364) em vez
+      // do número provisório do dispositivo (EJC-0001), igual ao que o admin vê.
       await db.runAsync(
         `UPDATE pedidos
-         SET remoto_id = ?, sincronizacao_estado = 'PENDENTE'
+         SET remoto_id = ?, numero = ${SQL_NUMERO_DO_SERVIDOR}, sincronizacao_estado = 'PENDENTE'
          WHERE id = ?`,
         remotoId,
+        remoto.number ?? null,
+        remoto.number ?? null,
+        pedido.id,
+        remoto.number ?? null,
         pedido.id
       );
     }
@@ -362,6 +375,35 @@ export async function sincronizarPedidosRecebidos() {
 
   const pedidos = (await resposta.json()) as PedidoRemoto[];
   for (const pedido of pedidos) await guardarPedidoRemoto(pedido);
+  if (Platform.OS === 'web') await alinharPedidosComServidor(pedidos);
+}
+
+/**
+ * Na versão web, o servidor é a fonte de verdade do painel admin: a cópia guardada
+ * no navegador é só uma cache. Quando chega a lista completa do servidor, removemos
+ * do navegador os pedidos que já lá não existem (apagados ou criados noutro ambiente),
+ * em vez de os deixar presos com erros. Pedidos ainda não enviados (sem remoto_id)
+ * mantêm-se, para não perder trabalho por enviar.
+ */
+async function alinharPedidosComServidor(pedidosServidor: PedidoRemoto[]) {
+  // Proteção: uma lista vazia pode ser uma resposta anómala; nesse caso não removemos nada.
+  if (pedidosServidor.length === 0) return;
+  const idsServidor = new Set(pedidosServidor.map((pedido) => pedido.id));
+  const locais = await db.getAllAsync<{ id: number; remoto_id: string; documento_uri: string | null }>(
+    'SELECT id, remoto_id, documento_uri FROM pedidos WHERE remoto_id IS NOT NULL'
+  );
+  const obsoletos = locais.filter((pedido) => !idsServidor.has(pedido.remoto_id));
+  if (obsoletos.length === 0) return;
+
+  await executarTransacaoLocal(async (transacao) => {
+    for (const pedido of obsoletos) {
+      await transacao.runAsync('UPDATE movimentos_stock SET pedido_id = NULL WHERE pedido_id = ?', pedido.id);
+      await transacao.runAsync('DELETE FROM pagamentos WHERE pedido_id = ?', pedido.id);
+      await transacao.runAsync('DELETE FROM pedidos WHERE id = ?', pedido.id);
+    }
+  });
+  for (const pedido of obsoletos) await removerDocumentoWeb(pedido.documento_uri).catch(() => undefined);
+  console.info(`Removidos do navegador ${obsoletos.length} pedido(s) que já não existem no servidor.`);
 }
 
 let filaSincronizacaoCliente: Promise<void> = Promise.resolve();
@@ -475,9 +517,13 @@ async function sincronizarPedidosClienteAgora(apenasPedidoId?: number) {
         .filter((pagamento) => pagamento.status === 'CONFIRMED')
         .reduce((total, pagamento) => total + pagamento.amountCents, 0) / 100;
       await transacao.runAsync(
-        'UPDATE pedidos SET estado = ?, valor_pago = ? WHERE id = ?',
+        `UPDATE pedidos SET estado = ?, valor_pago = ?, numero = ${SQL_NUMERO_DO_SERVIDOR} WHERE id = ?`,
         estadoRemotoParaLocal[remoto.status],
         valorPagoRemoto,
+        remoto.number ?? null,
+        remoto.number ?? null,
+        pedido.id,
+        remoto.number ?? null,
         pedido.id
       );
     };

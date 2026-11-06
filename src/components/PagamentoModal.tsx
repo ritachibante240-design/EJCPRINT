@@ -4,7 +4,7 @@ import { showAppAlert } from './AppAlert';
 import React, { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { enviarPagamento, MetodoPagamento, TipoPagamento } from '../services/pagamentoService';
@@ -31,6 +31,8 @@ export type PagamentoModalProps = {
 };
 
 export default function PagamentoModal({ visible, pedidoId, numeroPedido, cliente, total, valor: valorProp, valorInicial, tipoInicial = 'SINAL', tipo: tipoProp, onClose, onEnviado }: PagamentoModalProps) {
+  const { width } = useWindowDimensions();
+  const ecraLargo = width >= 768;
   const totalSeguro = Number(total ?? valorProp ?? 0);
   const [tipo, setTipo] = useState<TipoPagamento>(tipoProp ?? tipoInicial);
   const [metodo, setMetodo] = useState<MetodoPagamento>('M-Pesa');
@@ -125,8 +127,11 @@ export default function PagamentoModal({ visible, pedidoId, numeroPedido, client
       presentationStyle="pageSheet"
       onRequestClose={fechar}
     >
-      <View style={styles.overlay}>
-        <ScrollView contentContainerStyle={styles.content}>
+      <View style={[styles.overlay, ecraLargo && styles.overlayLargo]}>
+        <ScrollView
+          style={ecraLargo ? styles.scrollLargo : undefined}
+          contentContainerStyle={[styles.content, ecraLargo && styles.contentLargo]}
+        >
           <Text style={styles.title}>Pagamento do pedido</Text>
           <Text style={styles.subtitle}>
             {numeroPedido}
@@ -198,6 +203,7 @@ export default function PagamentoModal({ visible, pedidoId, numeroPedido, client
             </View>
           )}
           <Text style={styles.label}>Comprovativo</Text>
+          <Text style={styles.hint}>Imagem (JPG ou PNG) ou PDF, com até 5 MB.</Text>
           <View style={styles.row}>
             {Platform.OS !== 'web' && (
               <Pressable style={styles.button} onPress={() => escolher(true)}>
@@ -262,6 +268,22 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "flex-end",
   },
+  // No PC/tablet: janela centrada com largura máxima, em vez de ocupar o ecrã todo.
+  overlayLargo: {
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.xl,
+  },
+  scrollLargo: {
+    width: "100%",
+    maxWidth: 620,
+    maxHeight: "92%",
+    flexGrow: 0,
+  },
+  contentLargo: {
+    borderRadius: 22,
+    paddingBottom: spacing.xl,
+  },
   content: {
     backgroundColor: colors.background,
     padding: spacing.xl,
@@ -271,6 +293,7 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.brand, fontSize: 23, fontWeight: fontWeights.bold },
   subtitle: { color: colors.muted, marginTop: spacing.xs, marginBottom: 18 },
+  hint: { color: colors.muted, fontSize: 13, marginTop: -4, marginBottom: spacing.sm },
   label: {
     color: colors.text,
     fontWeight: fontWeights.bold,

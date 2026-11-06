@@ -67,7 +67,7 @@ export async function obterResumoCaixa(): Promise<ResumoCaixa> {
 }
 
 export async function listarMovimentosCaixa(): Promise<MovimentoCaixa[]> {
-  const movimentosRemotos = await fetchRemoto<Array<{ id: string; tipo: 'ENTRADA' | 'SAIDA'; descricao: string; detalhe: string; amountCents: number; date: string }>>('/inventory/cash/movements');
+  const movimentosRemotos = await fetchRemoto<{ id: string; tipo: 'ENTRADA' | 'SAIDA'; descricao: string; detalhe: string; amountCents: number; date: string }[]>('/inventory/cash/movements');
   if (movimentosRemotos) {
     return movimentosRemotos.map((item) => ({
       id: item.id,

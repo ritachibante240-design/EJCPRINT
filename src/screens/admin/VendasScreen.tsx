@@ -1,4 +1,3 @@
-import { formatarDinheiro } from '../../utils/formatters';
 import { colors, fontWeights, radii, spacing } from '../../theme';
 import { showAppAlert } from '../../components/AppAlert';
 import TextInput from '../../components/AppTextInput';
@@ -11,7 +10,6 @@ import {
 	StyleSheet,
 	FlatList,
 	Pressable,
-	Alert,
 	Platform,
 	Modal,
 	Image,

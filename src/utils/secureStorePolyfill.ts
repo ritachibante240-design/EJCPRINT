@@ -2,7 +2,8 @@ import { Platform } from 'react-native';
 
 if (Platform.OS === 'web') {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // Import dinâmico só na web: o módulo nativo não existe no navegador.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const ExpoSecureStoreModule = require('expo-secure-store/build/ExpoSecureStore');
     const target = ExpoSecureStoreModule.default || ExpoSecureStoreModule;
     if (target) {

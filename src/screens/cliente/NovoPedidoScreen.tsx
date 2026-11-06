@@ -424,7 +424,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                     {documento?.name ?? "Adicionar documento"}
                   </Text>
                   <Text style={styles.servicePrice}>
-                    {documento ? "Toque para trocar" : "PDF ou documento"}
+                    {documento ? "Toque para trocar" : "PDF, DOC ou DOCX • até 20 MB"}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={21} color={colors.subtle} />

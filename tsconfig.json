@@ -3,5 +3,13 @@
   "compilerOptions": {
     "strict": true
   },
-  "exclude": ["backend", "inspect", "node_modules"]
+  "exclude": [
+    "backend",
+    "inspect",
+    "node_modules",
+    "tests",
+    "playwright.config.ts",
+    "dist",
+    "dist-test"
+  ]
 }

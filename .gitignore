@@ -48,3 +48,9 @@ yarn-error.*
 
 # EAS inspection output
 inspect/
+
+# Testes automáticos da versão web (npm run test:web)
+dist-test/
+test-results/
+playwright-report/
+tests/web/.ficheiros/

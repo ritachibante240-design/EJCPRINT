@@ -149,6 +149,7 @@ export class OrdersService {
       where: { id },
       select: {
         id: true,
+        number: true,
         status: true,
         payments: {
           select: {

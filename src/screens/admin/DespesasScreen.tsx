@@ -8,7 +8,6 @@ import {
 	Pressable,
 	StyleSheet,
 	FlatList,
-	Alert,
 	KeyboardAvoidingView,
 	Platform,
 } from 'react-native';
