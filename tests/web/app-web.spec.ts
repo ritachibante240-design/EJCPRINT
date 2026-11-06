@@ -2,6 +2,7 @@ import { expect, type BrowserContext, type Page, type Route, test } from '@playw
 import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { PDFDocument } from 'pdf-lib';
+import { deflateRawSync } from 'node:zlib';
 
 // Testes da versão web da EJC Print. A API é sempre simulada (page.route):
 // nenhum pedido chega à Render nem à base de dados real.
@@ -19,6 +20,45 @@ const DOCUMENTO = path.join(PASTA_FICHEIROS, 'documento-5mb.pdf');
 const COMPROVATIVO = path.join(PASTA_FICHEIROS, 'comprovativo.png');
 const PDF_6_PAGINAS = path.join(PASTA_FICHEIROS, 'relatorio-6-paginas.pdf');
 const DOCUMENTO_WORD = path.join(PASTA_FICHEIROS, 'carta.docx');
+const DOCX_7_PAGINAS = path.join(PASTA_FICHEIROS, 'trabalho-7-paginas.docx');
+
+/** ZIP mínimo (como um .docx) com ficheiros comprimidos; o CRC não é verificado pela app. */
+function criarZip(ficheiros: Record<string, string>): Buffer {
+  const locais: Buffer[] = [];
+  const centrais: Buffer[] = [];
+  let posicao = 0;
+  for (const [nome, conteudo] of Object.entries(ficheiros)) {
+    const dados = deflateRawSync(Buffer.from(conteudo));
+    const nomeBytes = Buffer.from(nome);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt32LE(dados.length, 18);
+    local.writeUInt32LE(Buffer.byteLength(conteudo), 22);
+    local.writeUInt16LE(nomeBytes.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt32LE(dados.length, 20);
+    central.writeUInt32LE(Buffer.byteLength(conteudo), 24);
+    central.writeUInt16LE(nomeBytes.length, 28);
+    central.writeUInt32LE(posicao, 42);
+    locais.push(local, nomeBytes, dados);
+    centrais.push(central, nomeBytes);
+    posicao += 30 + nomeBytes.length + dados.length;
+  }
+  const diretorio = Buffer.concat(centrais);
+  const fim = Buffer.alloc(22);
+  fim.writeUInt32LE(0x06054b50, 0);
+  fim.writeUInt16LE(Object.keys(ficheiros).length, 8);
+  fim.writeUInt16LE(Object.keys(ficheiros).length, 10);
+  fim.writeUInt32LE(diretorio.length, 12);
+  fim.writeUInt32LE(posicao, 16);
+  return Buffer.concat([...locais, diretorio, fim]);
+}
 
 test.beforeAll(async () => {
   if (!existsSync(PASTA_FICHEIROS)) mkdirSync(PASTA_FICHEIROS, { recursive: true });
@@ -26,6 +66,17 @@ test.beforeAll(async () => {
     const pdf = await PDFDocument.create();
     for (let i = 0; i < 6; i += 1) pdf.addPage([595, 842]);
     writeFileSync(PDF_6_PAGINAS, await pdf.save());
+  }
+  if (!existsSync(DOCX_7_PAGINAS)) {
+    writeFileSync(
+      DOCX_7_PAGINAS,
+      criarZip({
+        '[Content_Types].xml': '<?xml version="1.0"?><Types/>',
+        'word/document.xml': '<?xml version="1.0"?><w:document/>',
+        'docProps/app.xml':
+          '<?xml version="1.0" encoding="UTF-8"?><Properties><Pages>7</Pages><Words>1200</Words></Properties>',
+      }),
+    );
   }
   if (!existsSync(DOCUMENTO_WORD)) writeFileSync(DOCUMENTO_WORD, Buffer.from('PK\x03\x04 documento word de teste'));
 
@@ -535,4 +586,20 @@ test('pedido pronto: o admin avisa o cliente por WhatsApp com a mensagem já esc
   const mensagem = url.searchParams.get('text') ?? '';
   expect(mensagem).toContain('Olá Maria, o seu pedido EJC-2026-PRONTO (Impressão P/B) na EJC Print está pronto.');
   expect(mensagem).toContain('Falta pagar 3.00 MT.');
+});
+
+test('Word: as páginas guardadas no .docx são lidas sozinhas e não há pré-visualização no navegador', async ({ context, page }) => {
+  await simularApi(context);
+  await page.goto('/');
+  await page.getByText('Continuar como cliente').first().click();
+  await page.getByText('Fazer pedido').click();
+  await page.getByText('Impressão P/B').first().click();
+  await page.getByText('Continuar', { exact: true }).first().click();
+  const [escolha] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Adicionar documento').click()]);
+  await escolha.setFiles(DOCX_7_PAGINAS);
+  await expect(page.getByText('7 páginas (lidas do ficheiro Word; a papelaria confirma)')).toBeVisible();
+  await expect(page.getByText('Pré-visualizar o documento')).toHaveCount(0);
+  await expect(page.getByText('O navegador não consegue pré-visualizar ficheiros Word.', { exact: false })).toBeVisible();
+  await page.getByText('Continuar', { exact: true }).last().click();
+  await expect(page.getByText('21.00 MT')).toBeVisible();
 });

@@ -34,6 +34,7 @@ import PagamentoModal from "../../components/PagamentoModal";
 import * as Sharing from "expo-sharing";
 import {
   contarPaginasPdf,
+  contarPaginasWord,
   ehPdf,
   ehWord,
   formatarListaPaginas,
@@ -123,6 +124,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
   const [formaEntrega, setFormaEntrega] = useState<FormaEntrega | null>(null);
   // Páginas contadas automaticamente no PDF (null = o cliente escreve o número).
   const [paginasContadas, setPaginasContadas] = useState<number | null>(null);
+  const [origemContagem, setOrigemContagem] = useState<"PDF" | "WORD">("PDF");
   const [contandoPaginas, setContandoPaginas] = useState(false);
   // Imprimir todas as páginas ou só um intervalo (ex.: 3 a 10).
   const [imprimirTudo, setImprimirTudo] = useState(true);
@@ -275,14 +277,14 @@ export default function NovoPedidoScreen({ navigation }: any) {
         limparOpcoesDePaginas();
         setPaginasContadas(null);
         setNumeroPaginas("");
-        if (ehPdf(arquivo.name, arquivo.mimeType)) {
-          // Conta as páginas do PDF para o preço ficar certo (o cliente não precisa de as contar).
+        const pdf = ehPdf(arquivo.name, arquivo.mimeType);
+        if (pdf || ehWord(arquivo.name, arquivo.mimeType)) {
+          // Conta as páginas para o preço ficar certo (o cliente não precisa de as contar).
           setContandoPaginas(true);
           try {
-            const total = await contarPaginasPdf({
-              uri: documentoUri,
-              file: arquivo.file,
-            });
+            const fonte = { uri: documentoUri, file: arquivo.file };
+            const total = pdf ? await contarPaginasPdf(fonte) : await contarPaginasWord(fonte);
+            setOrigemContagem(pdf ? "PDF" : "WORD");
             if (total) {
               setPaginasContadas(total);
               setNumeroPaginas(String(total));
@@ -627,7 +629,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 <Ionicons name="chevron-forward" size={21} color={colors.subtle} />
               </Pressable>
             )}
-            {ehImpressao && documento && (
+            {ehImpressao && documento && (Platform.OS !== "web" || ehPdf(documento.name, documento.mimeType)) && (
               <Pressable
                 accessibilityRole="button"
                 style={styles.previewButton}
@@ -642,7 +644,9 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 <Ionicons name="alert-circle-outline" size={21} color={colors.warning} />
                 <Text style={styles.avisoWordTexto}>
                   Ficheiro Word: a formatação pode mudar quando for aberto noutro computador, e a
-                  papelaria vai confirmar o número de páginas. Para ter a certeza, envie em PDF.
+                  papelaria vai confirmar o número de páginas.
+                  {Platform.OS === "web" ? " O navegador não consegue pré-visualizar ficheiros Word." : ""}
+                  {" "}Para ter a certeza, envie em PDF.
                 </Text>
               </View>
             )}
@@ -660,13 +664,16 @@ export default function NovoPedidoScreen({ navigation }: any) {
             </Text>
             {contandoPaginas ? (
               <View style={styles.contagem}>
-                <Text style={styles.contagemTexto}>A contar as páginas do PDF...</Text>
+                <Text style={styles.contagemTexto}>A contar as páginas do documento...</Text>
               </View>
             ) : paginasContadas !== null ? (
               <View style={styles.contagem}>
                 <Ionicons name="checkmark-circle" size={20} color={colors.success} />
                 <Text style={styles.contagemTexto}>
-                  {paginasContadas} página{paginasContadas !== 1 ? "s" : ""} (contadas automaticamente no PDF)
+                  {paginasContadas} página{paginasContadas !== 1 ? "s" : ""}{" "}
+                  {origemContagem === "PDF"
+                    ? "(contadas automaticamente no PDF)"
+                    : "(lidas do ficheiro Word; a papelaria confirma)"}
                 </Text>
               </View>
             ) : (
