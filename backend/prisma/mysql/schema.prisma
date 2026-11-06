@@ -32,6 +32,8 @@ model Order {
   customerPhone     String
   service           String
   instructions      String?         @db.Text
+  deliveryFormat    String?         @db.VarChar(20)
+  deliveryMethod    String?         @db.VarChar(20)
   unitPriceCents    Int
   pageCount         Int
   copyCount         Int

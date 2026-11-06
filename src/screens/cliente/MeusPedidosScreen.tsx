@@ -25,6 +25,9 @@ import {
 } from '../../services/pagamentoService';
 import { obterEtapasPedido, obterNomeEstado } from '../../utils/estadoPedido';
 import PagamentoModal from '../../components/PagamentoModal';
+import AvisoOriginal from '../../components/AvisoOriginal';
+import { aguardaOriginal } from '../../utils/servicoPresencial';
+import { descreverEntrega } from '../../utils/servicos';
 
 function ProgressoPedido({ estado, servico }: { estado: string; servico: string }) {
   if (estado === 'Cancelado')
@@ -442,7 +445,13 @@ export default function MeusPedidosScreen() {
               <View style={styles.serviceArea}>
                 <View style={styles.serviceIcon}>
                   <Ionicons
-                    name={item.servico === 'Digitalização' ? 'scan-outline' : 'print-outline'}
+                    name={
+                      item.servico === 'Digitalização'
+                        ? 'scan-outline'
+                        : item.servico === 'Digitação'
+                          ? 'create-outline'
+                          : 'print-outline'
+                    }
                     size={23}
                     color={colors.brand}
                   />
@@ -454,6 +463,12 @@ export default function MeusPedidosScreen() {
                   </Text>
                 </View>
               </View>
+              {aguardaOriginal(item) && <AvisoOriginal />}
+              {descreverEntrega(item.formato_entrega, item.forma_entrega) && (
+                <Text style={styles.entregaTexto}>
+                  {descreverEntrega(item.formato_entrega, item.forma_entrega)}
+                </Text>
+              )}
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Total</Text>
                 <Text style={styles.totalValue}>{Number(item.total ?? 0).toFixed(2)} MT</Text>
@@ -606,6 +621,7 @@ const styles = StyleSheet.create({
   },
   serviceName: { color: colors.brand, fontWeight: fontWeights.bold, fontSize: 15 },
   serviceInfo: { color: colors.subtle, fontSize: 13, marginTop: 3 },
+  entregaTexto: { color: colors.brand, fontWeight: fontWeights.bold, fontSize: 13, marginTop: 10 },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -3,6 +3,16 @@ import TextInput from "../../components/AppTextInput";
 import { colors, fontWeights, radii, spacing } from '../../theme';
 import { abrirPoliticaPrivacidade } from '../../utils/privacyPolicy';
 import { guardarDocumentoWeb } from "../../utils/webDocumentStore";
+import AvisoOriginal from "../../components/AvisoOriginal";
+import { precisaDoOriginal } from "../../utils/servicoPresencial";
+import {
+  ehServicoDigital,
+  FORMAS_ENTREGA,
+  formatosDoServico,
+  SERVICO_DIGITACAO,
+  type FormaEntrega,
+  type FormatoEntrega,
+} from "../../utils/servicos";
 import React, { Fragment, useMemo, useRef, useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
 import { Directory, File, Paths } from "expo-file-system";
@@ -30,6 +40,7 @@ const servicos: Servico[] = [
   { id: 3, nome: "Colorida simples", preco: 5 },
   { id: 4, nome: "Colorida com imagens", preco: 10 },
   { id: 5, nome: "Digitalização", preco: 15 },
+  { id: 6, nome: "Digitação", preco: 15 },
 ];
 
 function calcularPrecoEncadernacao(folhasPorExemplar: number): number | null {
@@ -99,9 +110,9 @@ export default function NovoPedidoScreen({ navigation }: any) {
   const [instrucoesDigitalizacao, setInstrucoesDigitalizacao] = useState("");
   const [documento, setDocumento] =
     useState<DocumentPicker.DocumentPickerAsset | null>(null);
-  const [formatoDigitalizacao, setFormatoDigitalizacao] = useState<
-    "PDF" | "Imagem"
-  >("PDF");
+  // Serviços digitais: formato do ficheiro e como o cliente o recebe.
+  const [formatoEntrega, setFormatoEntrega] = useState<FormatoEntrega | null>(null);
+  const [formaEntrega, setFormaEntrega] = useState<FormaEntrega | null>(null);
   const [pagamentoAberto, setPagamentoAberto] = useState(false);
   const [pedidoParaPagamento, setPedidoParaPagamento] = useState<{
     id: number;
@@ -112,23 +123,48 @@ export default function NovoPedidoScreen({ navigation }: any) {
   const [tipoPagamento, setTipoPagamento] = useState<TipoPagamento>("SINAL");
   const servico = servicoSelecionado?.nome ?? "";
   const ehDigitalizacao = servico === "Digitalização";
+  const ehDigitacao = servico === SERVICO_DIGITACAO;
+  const servicoDigital = ehServicoDigital(servico);
   const ehImpressao = [
     "Impressão P/B",
     "Colorida simples",
     "Colorida com imagens",
   ].includes(servico);
   const ehFotocopia = servico === "Fotocópia P/B";
+  const servicoImpressaoPB = servicos.find((item) => item.nome === "Impressão P/B");
+  const precoImpressaoPB = servicoImpressaoPB?.preco ?? 3;
+
+  function escolherServico(novo: Servico) {
+    setServicoSelecionado(novo);
+    setFormatoEntrega(null);
+    setFormaEntrega(null);
+    if (ehServicoDigital(novo.nome)) {
+      // Um ficheiro digital não tem cópias, frente e verso nem encadernação.
+      setNumeroCopias("1");
+      setFrenteVerso(false);
+      setTipoEncadernacao("SEM_ENCADERNACAO");
+    }
+  }
+
+  function passarParaImpressao() {
+    if (!servicoImpressaoPB) return;
+    setServicoSelecionado(servicoImpressaoPB);
+    showAppAlert(
+      "Pedido alterado para Impressão P/B",
+      `Anexe o documento em PDF (pode ser uma digitalização ou uma foto convertida em PDF). O preço passa a ${servicoImpressaoPB.preco} MT por página e não precisa de levar o original à papelaria.`,
+    );
+  }
   const calculo = useMemo(() => {
     const p = Number(numeroPaginas);
     const c = Number(numeroCopias);
     if (!Number.isInteger(p) || p <= 0 || !Number.isInteger(c) || c <= 0)
       return null;
     try {
-      return calcularImpressao(p, c, frenteVerso && !ehDigitalizacao);
+      return calcularImpressao(p, c, frenteVerso && !servicoDigital);
     } catch {
       return null;
     }
-  }, [numeroPaginas, numeroCopias, frenteVerso, ehDigitalizacao]);
+  }, [numeroPaginas, numeroCopias, frenteVerso, servicoDigital]);
   const precoEncadernacaoPorCopia =
     tipoEncadernacao !== "SEM_ENCADERNACAO" && calculo
       ? calcularPrecoEncadernacao(calculo.folhasPorCopia)
@@ -223,6 +259,15 @@ export default function NovoPedidoScreen({ navigation }: any) {
         "Documento necessário",
         "Selecione o documento que pretende imprimir.",
       );
+    if (ehDigitacao && instrucoesDigitalizacao.trim().length < 10)
+      return showAppAlert(
+        "Descreva o documento",
+        "Escreva o tema e as instruções do documento que pretende (pelo menos uma frase).",
+      );
+    if (servicoDigital && !formatoEntrega)
+      return showAppAlert("Escolha o formato", "Indique em que formato quer receber o ficheiro.");
+    if (servicoDigital && !formaEntrega)
+      return showAppAlert("Escolha a entrega", "Indique como quer receber o ficheiro.");
     if (necessitaCotacaoEncadernacao)
       return showAppAlert(
         "Encadernação por cotar",
@@ -251,19 +296,21 @@ export default function NovoPedidoScreen({ navigation }: any) {
         cliente: cliente.trim(),
         contacto: contacto.trim(),
         servico: servicoSelecionado.nome,
-        instrucoes: ehDigitalizacao ? instrucoesDigitalizacao.trim() : undefined,
+        instrucoes: ehDigitacao ? instrucoesDigitalizacao.trim() : undefined,
         precoUnitario: servicoSelecionado.preco,
         quantidade: Number(numeroCopias),
         total,
         numeroPaginas: Number(numeroPaginas),
         numeroCopias: Number(numeroCopias),
-        frenteVerso: ehDigitalizacao ? false : frenteVerso,
-        folhasNecessarias: ehDigitalizacao ? 0 : calculo.totalFolhas,
+        frenteVerso: servicoDigital ? false : frenteVerso,
+        folhasNecessarias: servicoDigital ? 0 : calculo.totalFolhas,
         documentoNome:
-          documento?.name ?? `Digitalização ${formatoDigitalizacao}`,
+          documento?.name ?? `${servico} ${formatoEntrega ?? ""}`.trim(),
         documentoUri,
         tipoEncadernacao,
         precoEncadernacao,
+        formatoEntrega: servicoDigital ? formatoEntrega ?? undefined : undefined,
+        formaEntrega: servicoDigital ? formaEntrega ?? undefined : undefined,
       });
       setPedidoParaPagamento({ id: p.id, numero: p.numero, total: p.total });
       setValorPagamento(p.total * 0.5);
@@ -272,6 +319,8 @@ export default function NovoPedidoScreen({ navigation }: any) {
       setCliente("");
       setContacto("");
       setInstrucoesDigitalizacao("");
+      setFormatoEntrega(null);
+      setFormaEntrega(null);
       setServicoSelecionado(null);
       setNumeroPaginas("");
       setNumeroCopias("1");
@@ -334,14 +383,16 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 <Pressable
                   key={s.id}
                   style={[styles.serviceCard, ok && styles.selectedCard]}
-                  onPress={() => setServicoSelecionado(s)}
+                  onPress={() => escolherServico(s)}
                 >
                   <View style={[styles.serviceIcon, ok && styles.selectedIcon]}>
                     <Ionicons
                       name={
-                        s.nome.includes("Digitalização")
+                        s.nome === "Digitalização"
                           ? "scan-outline"
-                          : "print-outline"
+                          : s.nome === SERVICO_DIGITACAO
+                            ? "create-outline"
+                            : "print-outline"
                       }
                       size={25}
                       color={ok ? "#FFF" : colors.brand}
@@ -359,6 +410,8 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 </Pressable>
               );
             })}
+            {ehFotocopia && <AvisoOriginal />}
+            {ehDigitalizacao && <AvisoOriginal />}
             <Pressable
               disabled={!servicoSelecionado}
               style={[styles.primary, !servicoSelecionado && styles.disabled]}
@@ -371,8 +424,13 @@ export default function NovoPedidoScreen({ navigation }: any) {
         )}
         {etapa === 2 && (
           <>
-            <Text style={styles.pageTitle}>Prepare a impressão</Text>
-            <Text style={styles.pageSubtitle}>Documento, páginas e cópias</Text>
+            <Text style={styles.pageTitle}>
+              {ehDigitalizacao ? "Prepare a digitalização" : ehDigitacao ? "Descreva o documento" : "Prepare a impressão"}
+            </Text>
+            <Text style={styles.pageSubtitle}>
+              {servicoDigital ? "Páginas, formato e entrega" : "Documento, páginas e cópias"}
+            </Text>
+            {ehDigitalizacao && <AvisoOriginal />}
             {ehDigitalizacao && (
               <View style={styles.infoBox}>
                 <Ionicons name="scan-outline" size={23} color={colors.brand} />
@@ -381,11 +439,11 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 </Text>
               </View>
             )}
-            {ehDigitalizacao && (
+            {ehDigitacao && (
               <>
-                <Text style={styles.label}>Tema e instruções (opcional)</Text>
+                <Text style={styles.label}>Tema e instruções</Text>
                 <Text style={styles.helperText}>
-                  Se pretende que o documento seja preparado com base nas suas informações, escreva aqui o tema e as instruções.
+                  Descreva o documento que pretende: o tema, o tipo de documento e as instruções a seguir.
                 </Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
@@ -402,12 +460,28 @@ export default function NovoPedidoScreen({ navigation }: any) {
               </>
             )}
             {ehFotocopia && (
-              <View style={styles.infoBox}>
-                <Ionicons name="copy-outline" size={23} color={colors.brand} />
-                <Text style={styles.infoText}>
-                  Informe as páginas originais e o número de cópias.
-                </Text>
-              </View>
+              <>
+                <AvisoOriginal />
+                <View style={styles.infoBox}>
+                  <Ionicons name="copy-outline" size={23} color={colors.brand} />
+                  <Text style={styles.infoText}>
+                    Informe as páginas originais e o número de cópias.
+                  </Text>
+                </View>
+                {/* Alternativa: em vez de levar o original, enviar o documento em PDF.
+                    Nesse caso o pedido passa a ser uma Impressão P/B normal. */}
+                <Pressable style={styles.alternativa} onPress={passarParaImpressao}>
+                  <Ionicons name="cloud-upload-outline" size={20} color={colors.brand} />
+                  <View style={styles.serviceInfo}>
+                    <Text style={styles.alternativaTitulo}>Não pode ir à papelaria?</Text>
+                    <Text style={styles.alternativaTexto}>
+                      Envie o documento em PDF (pode ser uma digitalização ou uma foto convertida em PDF).
+                      O pedido passa a Impressão P/B ({precoImpressaoPB} MT/página).
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={colors.subtle} />
+                </Pressable>
+              </>
             )}
             {ehImpressao && (
               <Pressable
@@ -430,10 +504,17 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 <Ionicons name="chevron-forward" size={21} color={colors.subtle} />
               </Pressable>
             )}
-            <Text style={styles.label}>Quantas páginas tem o documento?</Text>
+            <Text style={styles.label}>
+              {ehDigitalizacao
+                ? "Quantas páginas vai digitalizar?"
+                : ehDigitacao
+                  ? "Quantas páginas estima que o documento terá?"
+                  : "Quantas páginas tem o documento?"}
+            </Text>
             <Text style={styles.helperText}>
-              {servicoSelecionado?.preco} MT por página. O total do serviço considera páginas × cópias;
-              frente e verso reduz as folhas, não as páginas cobradas.
+              {servicoDigital
+                ? `${servicoSelecionado?.preco} MT por página.`
+                : `${servicoSelecionado?.preco} MT por página. O total do serviço considera páginas × cópias; frente e verso reduz as folhas, não as páginas cobradas.`}
             </Text>
             <TextInput
               style={styles.input}
@@ -442,6 +523,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
               onChangeText={setNumeroPaginas}
               placeholder="quantidade de páginas"
             />
+            {!servicoDigital && (<>
             <Text style={styles.label}>Quantas cópias?</Text>
             <View style={styles.counter}>
               <Pressable
@@ -462,10 +544,11 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 <Ionicons name="add" size={23} color={colors.brand} />
               </Pressable>
             </View>
-            {!ehDigitalizacao && (
+            </>)}
+            {!servicoDigital && (
               <Text style={styles.label}>Tipo de impressão</Text>
             )}
-            {!ehDigitalizacao && (
+            {!servicoDigital && (
               <View style={styles.typeRow}>
                 <Pressable
                   style={[
@@ -489,28 +572,51 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 </Pressable>
               </View>
             )}
-            {ehDigitalizacao && (
-              <View style={styles.typeRow}>
-                <Pressable
-                  style={[
-                    styles.typeButton,
-                    formatoDigitalizacao === "PDF" && styles.typeSelected,
-                  ]}
-                  onPress={() => setFormatoDigitalizacao("PDF")}
-                >
-                  <Text>PDF</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.typeButton,
-                    formatoDigitalizacao === "Imagem" && styles.typeSelected,
-                  ]}
-                  onPress={() => setFormatoDigitalizacao("Imagem")}
-                >
-                  <Text>Imagem</Text>
-                </Pressable>
-              </View>
+            {servicoDigital && (
+              <>
+                <Text style={styles.label}>Em que formato quer receber?</Text>
+                {formatosDoServico(servico).map((opcao) => (
+                  <Pressable
+                    key={opcao.valor}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: formatoEntrega === opcao.valor }}
+                    style={[styles.opcaoEntrega, formatoEntrega === opcao.valor && styles.opcaoEntregaSelecionada]}
+                    onPress={() => setFormatoEntrega(opcao.valor)}
+                  >
+                    <Ionicons
+                      name={formatoEntrega === opcao.valor ? "radio-button-on" : "radio-button-off"}
+                      size={21}
+                      color={formatoEntrega === opcao.valor ? colors.brand : colors.subtle}
+                    />
+                    <View style={styles.serviceInfo}>
+                      <Text style={styles.opcaoTitulo}>{opcao.titulo}</Text>
+                      <Text style={styles.opcaoDescricao}>{opcao.descricao}</Text>
+                    </View>
+                  </Pressable>
+                ))}
+                <Text style={styles.label}>Como quer receber?</Text>
+                {FORMAS_ENTREGA.map((opcao) => (
+                  <Pressable
+                    key={opcao.valor}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: formaEntrega === opcao.valor }}
+                    style={[styles.opcaoEntrega, formaEntrega === opcao.valor && styles.opcaoEntregaSelecionada]}
+                    onPress={() => setFormaEntrega(opcao.valor)}
+                  >
+                    <Ionicons
+                      name={formaEntrega === opcao.valor ? "radio-button-on" : "radio-button-off"}
+                      size={21}
+                      color={formaEntrega === opcao.valor ? colors.brand : colors.subtle}
+                    />
+                    <View style={styles.serviceInfo}>
+                      <Text style={styles.opcaoTitulo}>{opcao.titulo}</Text>
+                      <Text style={styles.opcaoDescricao}>{opcao.descricao}</Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </>
             )}
+            {!servicoDigital && (<>
             <Text style={styles.label}>Encadernação (opcional)</Text>
             <Text style={styles.helperText}>
               Por exemplar: 30 MT até 50 folhas, 40 MT de 51 a 100 folhas e 50
@@ -551,6 +657,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 </Text>
               </View>
             )}
+            </>)}
             <View style={styles.navRow}>
               <Pressable style={styles.back} onPress={() => setEtapa(1)}>
                 <Text>Voltar</Text>
@@ -565,6 +672,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
           <>
             <Text style={styles.pageTitle}>Confirmar pedido</Text>
             <Text style={styles.pageSubtitle}>Verifique antes de enviar</Text>
+            {precisaDoOriginal(servico, ehDigitacao ? instrucoesDigitalizacao : undefined) && <AvisoOriginal />}
             <View style={styles.summary}>
               <Text style={styles.serviceTitle}>
                 {servicoSelecionado?.nome}
@@ -572,7 +680,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
               <Text style={styles.summaryLine}>
                 Documento: {numeroPaginas} páginas
               </Text>
-              {ehDigitalizacao && instrucoesDigitalizacao.trim().length > 0 && (
+              {ehDigitacao && instrucoesDigitalizacao.trim().length > 0 && (
                 <>
                   <Text style={styles.summaryLine}>Tema e instruções:</Text>
                   <Text style={styles.instructionsSummary}>
@@ -580,8 +688,18 @@ export default function NovoPedidoScreen({ navigation }: any) {
                   </Text>
                 </>
               )}
-              <Text style={styles.summaryLine}>Cópias: {numeroCopias}</Text>
-              {!ehDigitalizacao && (
+              {!servicoDigital && <Text style={styles.summaryLine}>Cópias: {numeroCopias}</Text>}
+              {servicoDigital && formatoEntrega && (
+                <Text style={styles.summaryLine}>
+                  Formato: {formatosDoServico(servico).find((opcao) => opcao.valor === formatoEntrega)?.titulo}
+                </Text>
+              )}
+              {servicoDigital && formaEntrega && (
+                <Text style={styles.summaryLine}>
+                  Entrega: {formaEntrega === "WHATSAPP" ? "WhatsApp (para o contacto indicado)" : "Levantar na papelaria"}
+                </Text>
+              )}
+              {!servicoDigital && (
                 <Text style={styles.summaryLine}>
                   Impressão: {frenteVerso ? "Frente e verso" : "Frente única"}
                 </Text>
@@ -851,5 +969,32 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   infoText: { flex: 1, color: "#486581", lineHeight: 20 },
+  opcaoEntrega: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 13,
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: colors.surface,
+  },
+  opcaoEntregaSelecionada: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
+  opcaoTitulo: { color: colors.brand, fontWeight: fontWeights.bold },
+  opcaoDescricao: { color: colors.muted, marginTop: 2, lineHeight: 19 },
+  alternativa: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 13,
+    padding: 14,
+    marginBottom: 15,
+    backgroundColor: colors.surface,
+  },
+  alternativaTitulo: { color: colors.brand, fontWeight: fontWeights.bold },
+  alternativaTexto: { color: colors.muted, marginTop: 3, lineHeight: 19 },
   edit: { padding: 15, alignItems: "center" },
 });

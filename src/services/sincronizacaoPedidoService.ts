@@ -16,6 +16,8 @@ type PedidoRemoto = {
   customerPhone: string;
   service: string;
   instructions?: string | null;
+  deliveryFormat?: string | null;
+  deliveryMethod?: string | null;
   unitPriceCents: number;
   pageCount: number;
   copyCount: number;
@@ -178,6 +180,8 @@ async function sincronizarPedidoLocalSemConcorrencia(pedido: Pedido) {
           doubleSided: pedido.frente_verso === 1,
           bindingType: pedido.tipo_encadernacao,
           bindingPrice: pedido.preco_encadernacao,
+          ...(pedido.formato_entrega ? { deliveryFormat: pedido.formato_entrega } : {}),
+          ...(pedido.forma_entrega ? { deliveryMethod: pedido.forma_entrega } : {}),
         }),
       });
 
@@ -334,7 +338,8 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
         documento_uri = ?, documento_remoto_id = ?, numero_paginas = ?,
         numero_copias = ?, frente_verso = ?, folhas_necessarias = ?, valor_pago = ?,
         tipo_encadernacao = ?, preco_encadernacao = ?, sync_chave = ?, remoto_id = ?,
-        sincronizacao_estado = ?, encadernacao_consumida = ?, espiral_encadernacao = ?, custo_encadernacao = ?
+        sincronizacao_estado = ?, encadernacao_consumida = ?, espiral_encadernacao = ?, custo_encadernacao = ?,
+        formato_entrega = COALESCE(?, formato_entrega), forma_entrega = COALESCE(?, forma_entrega)
        WHERE id = ?`,
       ...valores,
       existente.sincronizacao_estado === 'PENDENTE' && existente.documento_uri && !existente.documento_remoto_id
@@ -343,6 +348,8 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
       encadernacaoConsumida,
       espiralEncadernacao,
       custoEncadernacao,
+      pedido.deliveryFormat ?? null,
+      pedido.deliveryMethod ?? null,
       existente.id
     );
     return;
@@ -354,12 +361,15 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
       data_criacao, documento_nome, documento_uri, documento_remoto_id, numero_paginas,
       numero_copias, frente_verso, folhas_necessarias,
       valor_pago, tipo_encadernacao, preco_encadernacao, sync_chave, remoto_id,
-      sincronizacao_estado, encadernacao_consumida, espiral_encadernacao, custo_encadernacao
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO', ?, ?, ?)`,
+      sincronizacao_estado, encadernacao_consumida, espiral_encadernacao, custo_encadernacao,
+      formato_entrega, forma_entrega
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO', ?, ?, ?, ?, ?)`,
     ...valores,
     encadernacaoConsumida,
     espiralEncadernacao,
-    custoEncadernacao
+    custoEncadernacao,
+    pedido.deliveryFormat ?? null,
+    pedido.deliveryMethod ?? null
   );
 }
 

@@ -32,6 +32,8 @@ import {
 } from "../../services/pedidoService";
 import { sincronizarTudoPendentes } from "../../services/sincronizacaoSeguraService";
 import { obterNomeEstado, obterProximaAcao } from "../../utils/estadoPedido";
+import { aguardaOriginal } from "../../utils/servicoPresencial";
+import { descreverEntrega } from "../../utils/servicos";
 import { Ionicons } from "@expo/vector-icons";
 import { abrirArquivoPedido } from "../../services/arquivoRemotoService";
 import { obterTokenAdministrador } from "../../services/adminAuthService";
@@ -676,6 +678,12 @@ export default function PedidosScreen() {
           <View>
             <Text style={styles.orderNumber}>{item.numero}</Text>
             <Text style={styles.clientName}>{item.cliente}</Text>
+            {aguardaOriginal(item) && (
+              <View style={styles.aguardaOriginal}>
+                <Ionicons name="document-text-outline" size={14} color={colors.warning} />
+                <Text style={styles.aguardaOriginalTexto}>Aguarda o original</Text>
+              </View>
+            )}
           </View>
           <View
             style={[
@@ -703,6 +711,18 @@ export default function PedidosScreen() {
             </Text>
           </View>
         </View>
+        {descreverEntrega(item.formato_entrega, item.forma_entrega, item.contacto) && (
+          <View style={styles.entrega}>
+            <Ionicons
+              name={item.forma_entrega === "WHATSAPP" ? "logo-whatsapp" : "storefront-outline"}
+              size={17}
+              color={colors.brand}
+            />
+            <Text style={styles.entregaTexto}>
+              {descreverEntrega(item.formato_entrega, item.forma_entrega, item.contacto)}
+            </Text>
+          </View>
+        )}
         {item.sincronizacao_estado === "ERRO" && (
           <View style={styles.syncError}>
             <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
@@ -1299,6 +1319,28 @@ const styles = StyleSheet.create({
   },
   orderNumber: { color: colors.brand, fontSize: 18, fontWeight: fontWeights.bold },
   clientName: { color: colors.muted, marginTop: 3 },
+  entrega: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radii.sm,
+    backgroundColor: colors.brandSoft,
+  },
+  entregaTexto: { flex: 1, color: colors.brand, fontWeight: fontWeights.bold, fontSize: 13 },
+  aguardaOriginal: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 5,
+    marginTop: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: colors.warningSoft,
+  },
+  aguardaOriginalTexto: { color: colors.warning, fontSize: 12, fontWeight: fontWeights.bold },
   syncError: {
     flexDirection: "row",
     alignItems: "center",

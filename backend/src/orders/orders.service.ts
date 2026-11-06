@@ -112,6 +112,8 @@ export class OrdersService {
         customerPhone: input.customerPhone.trim(),
         service: input.service.trim(),
         instructions: input.instructions?.trim() || null,
+        deliveryFormat: input.deliveryFormat ?? null,
+        deliveryMethod: input.deliveryMethod ?? null,
         unitPriceCents,
         pageCount: input.pageCount,
         copyCount: input.copyCount,

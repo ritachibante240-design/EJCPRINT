@@ -32,7 +32,11 @@ export default function ServicosScreen({ navigation }: any) {
       </View>
 
       <View style={styles.card}>
-        <View style={styles.iconBox}><Ionicons name="scan-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Digitalização</Text><Text style={styles.price}>15 MT / página</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
+        <View style={styles.iconBox}><Ionicons name="scan-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Digitalização</Text><Text style={styles.price}>15 MT / página · documento em papel para ficheiro</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.iconBox}><Ionicons name="create-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Digitação</Text><Text style={styles.price}>15 MT / página · documento preparado a partir de tema e instruções</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
       </View>
 
       <View style={styles.priceGuide}>

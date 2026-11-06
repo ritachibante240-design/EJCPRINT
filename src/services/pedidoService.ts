@@ -2,6 +2,7 @@ import { db, executarTransacaoLocal } from '../database/database';
 import { calcularImpressao } from '../utils/calcularImpressao';
 import { sincronizarPedidoLocal } from './sincronizacaoPedidoService';
 import { obterTokenAdministrador } from './adminAuthService';
+import { ehServicoDigital, type FormaEntrega, type FormatoEntrega } from '../utils/servicos';
 
 export type NovoPedido = {
   cliente: string;
@@ -19,6 +20,8 @@ export type NovoPedido = {
   documentoUri?: string;
   tipoEncadernacao?: string;
   precoEncadernacao?: number;
+  formatoEntrega?: FormatoEntrega;
+  formaEntrega?: FormaEntrega;
 };
 
 export type Pedido = {
@@ -55,6 +58,8 @@ export type Pedido = {
   remoto_id: string | null;
   sincronizacao_estado: 'PENDENTE' | 'SINCRONIZADO' | 'ERRO';
   sincronizacao_erro: string | null;
+  formato_entrega: FormatoEntrega | null;
+  forma_entrega: FormaEntrega | null;
 };
 
 export type ResumoPedido = {
@@ -132,8 +137,11 @@ export async function criarPedido(pedido: NovoPedido) {
   const totalCentavosInformado = Math.round(
     (pedido.total + Number.EPSILON) * 100
   );
-  const folhasNecessariasCalculadas =
-    pedido.servico === 'Digitalização' ? 0 : calculo.totalFolhas;
+  const servicoDigital = ehServicoDigital(pedido.servico);
+  const folhasNecessariasCalculadas = servicoDigital ? 0 : calculo.totalFolhas;
+  if (servicoDigital && (!pedido.formatoEntrega || !pedido.formaEntrega)) {
+    throw new Error('Escolha o formato do ficheiro e como o quer receber.');
+  }
 
   if (
     !Number.isFinite(pedido.precoUnitario) ||
@@ -169,9 +177,11 @@ export async function criarPedido(pedido: NovoPedido) {
         frente_verso,
         folhas_necessarias,
         tipo_encadernacao,
-        preco_encadernacao
+        preco_encadernacao,
+        formato_entrega,
+        forma_entrega
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     null,
     pedido.cliente,
@@ -190,7 +200,9 @@ export async function criarPedido(pedido: NovoPedido) {
     pedido.frenteVerso ? 1 : 0,
     calculo.totalFolhas,
     pedido.tipoEncadernacao ?? 'SEM_ENCADERNACAO',
-    precoEncadernacao
+    precoEncadernacao,
+    servicoDigital ? pedido.formatoEntrega ?? null : null,
+    servicoDigital ? pedido.formaEntrega ?? null : null
   );
 
   const id = resultado.lastInsertRowId;

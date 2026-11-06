@@ -516,6 +516,9 @@ export async function iniciarBancoDados() {
   try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN encadernacao_consumida INTEGER NOT NULL DEFAULT 0`); } catch {}
   try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN espiral_encadernacao TEXT`); } catch {}
   try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN custo_encadernacao REAL NOT NULL DEFAULT 0`); } catch {}
+  // Serviços digitais: formato do ficheiro (PDF/IMAGEM/WORD) e forma de entrega (WHATSAPP/PAPELARIA).
+  try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN formato_entrega TEXT`); } catch {}
+  try { await db.execAsync(`ALTER TABLE pedidos ADD COLUMN forma_entrega TEXT`); } catch {}
 
   const chaveMigracao = 'MIGRAR_PAGAMENTOS_ANTIGOS_V1';
   const migracao = await db.getFirstAsync<{ chave: string }>('SELECT chave FROM migracoes WHERE chave = ?', chaveMigracao);

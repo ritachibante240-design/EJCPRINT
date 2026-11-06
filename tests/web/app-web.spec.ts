@@ -316,3 +316,96 @@ test('no painel web, pedidos que já não existem no servidor saem do navegador'
   await expect(page.getByText('Cliente do Servidor')).toBeVisible();
   await expect(page.getByText('Pedido Apagado no Servidor')).toBeHidden();
 });
+
+test('fotocópia: o cliente é avisado para levar o original e o admin vê "Aguarda o original"', async ({ context, page }) => {
+  await simularApi(context, (metodo, caminho) => {
+    if (metodo === 'POST' && caminho === '/api/orders') return { status: 201, corpo: { id: 'remoto-1' } };
+    return undefined;
+  });
+  const aviso = 'Traga o documento original à papelaria. Este pedido serve para reservar e adiantar o pagamento.';
+
+  await page.goto('/');
+  await page.getByText('Continuar como cliente').first().click();
+  await page.getByText('Fazer pedido').click();
+  await page.getByText('Fotocópia P/B').first().click();
+  await expect(page.getByText(aviso)).toBeVisible();
+  await page.getByText('Continuar', { exact: true }).first().click();
+  await page.getByPlaceholder('quantidade de páginas').fill('4');
+  await page.getByText('Continuar', { exact: true }).last().click();
+  await expect(page.getByText(aviso)).toBeVisible();
+  await page.getByPlaceholder('Nome Completo').fill('Cliente Fotocópia');
+  await page.getByPlaceholder('WhatsApp / contacto').fill('840000000');
+  await page.getByText('Confirmar pedido').last().click();
+  await page.getByText('Agora não').click();
+
+  await page.goto('/');
+  await page.getByText('Continuar como cliente').first().click();
+  await page.getByText('Pedidos', { exact: true }).last().click();
+  await expect(page.getByText(aviso)).toBeVisible();
+
+  await entrarComoAdmin(page);
+  await page.getByText('Pedidos', { exact: true }).first().click();
+  await expect(page.getByText('Aguarda o original')).toBeVisible();
+});
+
+test('fotocópia: o cliente pode enviar o documento em PDF e o pedido passa a Impressão P/B', async ({ context, page }) => {
+  await simularApi(context);
+  await page.goto('/');
+  await page.getByText('Continuar como cliente').first().click();
+  await page.getByText('Fazer pedido').click();
+  await page.getByText('Fotocópia P/B').first().click();
+  await page.getByText('Continuar', { exact: true }).first().click();
+  await page.getByText('Não pode ir à papelaria?').click();
+  await expect(page.getByText('Pedido alterado para Impressão P/B')).toBeVisible();
+  await expect(page.getByText('Adicionar documento')).toBeVisible();
+});
+
+test('digitação: o cliente escolhe formato e entrega, o servidor recebe-os e o admin vê "Entregar em"', async ({ context, page }) => {
+  let corpoPedido: Record<string, unknown> | undefined;
+  await simularApi(context, (metodo, caminho, route) => {
+    if (metodo === 'POST' && caminho === '/api/orders') {
+      corpoPedido = route.request().postDataJSON() as Record<string, unknown>;
+      return { status: 201, corpo: { id: 'remoto-digitacao' } };
+    }
+    return undefined;
+  });
+
+  await page.goto('/');
+  await page.getByText('Continuar como cliente').first().click();
+  await page.getByText('Fazer pedido').click();
+  await page.getByText('Digitação', { exact: true }).first().click();
+  await page.getByText('Continuar', { exact: true }).first().click();
+  await page.getByPlaceholder('Escreva o tema e as instruções').fill('Digitar a carta manuscrita, letra Arial 12.');
+  await page.getByPlaceholder('quantidade de páginas').fill('3');
+  await expect(page.getByText('Encadernação (opcional)')).toHaveCount(0);
+  await expect(page.getByText('Frente e verso')).toHaveCount(0);
+  await page.getByText('Word (DOCX)').click();
+  await page.getByText('WhatsApp', { exact: true }).click();
+  await page.getByText('Continuar', { exact: true }).last().click();
+  await page.getByPlaceholder('Nome Completo').fill('Cliente Digitação');
+  await page.getByPlaceholder('WhatsApp / contacto').fill('840000000');
+  await page.getByText('Confirmar pedido').last().click();
+  await page.getByText('Agora não').click();
+
+  await expect.poll(() => corpoPedido?.deliveryFormat).toBe('WORD');
+  expect(corpoPedido?.deliveryMethod).toBe('WHATSAPP');
+
+  await entrarComoAdmin(page);
+  await page.getByText('Pedidos', { exact: true }).first().click();
+  await expect(page.getByText('Entregar em: Word (DOCX) · por WhatsApp (840000000)')).toBeVisible();
+});
+
+test('digitalização: pede o formato e a entrega e esconde cópias e encadernação', async ({ context, page }) => {
+  await simularApi(context);
+  await page.goto('/');
+  await page.getByText('Continuar como cliente').first().click();
+  await page.getByText('Fazer pedido').click();
+  await page.getByText('Digitalização', { exact: true }).first().click();
+  await expect(page.getByText('Traga o documento original', { exact: false }).first()).toBeVisible();
+  await page.getByText('Continuar', { exact: true }).first().click();
+  await expect(page.getByText('Em que formato quer receber?')).toBeVisible();
+  await expect(page.getByText('Imagem (JPG)')).toBeVisible();
+  await expect(page.getByText('Levantar na papelaria')).toBeVisible();
+  await expect(page.getByText('Encadernação (opcional)')).toHaveCount(0);
+  await expect(page.getByText('Frente e verso')).toHaveCount(0);
+});
