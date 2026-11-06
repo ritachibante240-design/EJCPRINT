@@ -25,6 +25,7 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.12",
     "@nestjs/platform-express": "^11.1.12",
+    "@nestjs/throttler": "^6.7.1",
     "@prisma/client": "^6.19.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",

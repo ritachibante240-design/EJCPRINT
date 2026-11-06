@@ -6,16 +6,17 @@
 // 2. Cria dist/vercel.json para as rotas da app não darem 404 ao recarregar.
 // 3. Publica só a pasta dist/ na Vercel (o backend continua na Render).
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const API_PRODUCAO = 'https://ejcprint-1.onrender.com/api';
 
 function executar(comando, argumentos, ambiente = {}) {
-  console.log(`\n> ${comando} ${argumentos.join(' ')}\n`);
-  const resultado = spawnSync(comando, argumentos, {
+  const linha = [comando, ...argumentos].join(' ');
+  console.log(`\n> ${linha}\n`);
+  const resultado = spawnSync(linha, {
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    shell: true,
     env: { ...process.env, ...ambiente },
   });
   if (resultado.status !== 0) {
@@ -78,5 +79,22 @@ writeFileSync(
 );
 console.log('\nCriado dist/vercel.json');
 
-executar('npx', ['vercel', 'deploy', 'dist', '--prod']);
+// Ligação fixa ao projeto "dist" da Vercel (equipa chiba-service). O export do Expo
+// apaga a pasta dist/, por isso recriamos a ligação a cada publicação: assim a Vercel
+// não volta a fazer perguntas nem a criar projetos novos.
+mkdirSync(join('dist', '.vercel'), { recursive: true });
+writeFileSync(
+  join('dist', '.vercel', 'project.json'),
+  JSON.stringify({
+    projectId: 'prj_0Lf8DET874ONkK0LJZzPTARfrBsO',
+    orgId: 'team_V86fn3cBr4rAD4nDMamdauvx',
+    projectName: 'dist',
+  }),
+);
+// Nunca publicar ficheiros de ambiente (podem conter tokens).
+for (const nome of readdirSync('dist')) {
+  if (nome.startsWith('.env')) rmSync(join('dist', nome), { force: true });
+}
+
+executar('npx', ['vercel', 'deploy', 'dist', '--prod', '--yes']);
 console.log('\nPublicação concluída.');
