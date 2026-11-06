@@ -55,6 +55,22 @@ const unidadesDisponiveis = [
   'litros',
 ];
 
+/** "folhas" → "folha", "unidades" → "unidade", "frascos" → "frasco". */
+function unidadeNoSingular(unidade: string) {
+  const texto = unidade.trim();
+  if (/ões$/i.test(texto)) return texto.replace(/ões$/i, 'ão');
+  return texto.replace(/s$/i, '');
+}
+
+function formatarQuantidade(quantidade: number, unidade: string) {
+  return `${quantidade.toLocaleString('pt-PT', { maximumFractionDigits: 3 })} ${quantidade === 1 ? unidadeNoSingular(unidade) : unidade}`;
+}
+
+function formatarCustoUnitario(valor: number, unidade: string) {
+  const casas = valor > 0 && valor < 1 ? 4 : 2;
+  return `${valor.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: casas })} MT por ${unidadeNoSingular(unidade)}`;
+}
+
 export default function StockScreen() {
   const { isDesktop } = useResponsiveContent(20);
   const [itens, setItens] = useState<ItemStock[]>([]);
@@ -152,12 +168,27 @@ export default function StockScreen() {
       return;
     }
     showAppAlert(
-      'Confirmar saída',
-      `Retirar ${quantidade} ${itemSelecionado.unidade} de ${itemSelecionado.nome} do stock?${motivoSaida.trim() ? `\n\nMotivo: ${motivoSaida.trim()}` : ''}`,
+      'Registar saída de material?',
+      'Verifique os dados antes de continuar.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Confirmar', onPress: confirmarSaida },
+        { text: 'Registar saída', onPress: confirmarSaida },
       ],
+      {
+        tone: 'warning',
+        details: [
+          { label: 'Material', value: itemSelecionado.nome },
+          { label: 'Stock atual', value: formatarQuantidade(itemSelecionado.quantidade, itemSelecionado.unidade) },
+          { label: 'A retirar', value: formatarQuantidade(quantidade, itemSelecionado.unidade) },
+          ...(motivoSaida.trim() ? [{ label: 'Motivo', value: motivoSaida.trim() }] : []),
+          {
+            label: 'Stock após a saída',
+            value: formatarQuantidade(itemSelecionado.quantidade - quantidade, itemSelecionado.unidade),
+            destaque: true,
+          },
+        ],
+        note: 'A saída fica registada no histórico do material.',
+      },
     );
   }
 
@@ -374,12 +405,25 @@ export default function StockScreen() {
       return;
     }
     showAppAlert(
-      'Confirmar compra',
-      `${itemSelecionado.nome}\n\nQuantidade: ${quantidade} ${itemSelecionado.unidade}\nValor pago: ${formatarDinheiro(valor)}\n\nEsta operação aumentará o stock e registará uma saída no Caixa.`,
+      'Registar compra de material?',
+      'Verifique os dados antes de continuar.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Confirmar', onPress: confirmarCompra },
-      ]
+        { text: 'Registar compra', onPress: confirmarCompra },
+      ],
+      {
+        details: [
+          { label: 'Material', value: itemSelecionado.nome },
+          { label: 'Quantidade', value: formatarQuantidade(quantidade, itemSelecionado.unidade) },
+          { label: 'Custo unitário', value: formatarCustoUnitario(valor / quantidade, itemSelecionado.unidade) },
+          {
+            label: 'Stock após a compra',
+            value: formatarQuantidade(itemSelecionado.quantidade + quantidade, itemSelecionado.unidade),
+          },
+          { label: 'Valor pago', value: formatarDinheiro(valor), destaque: true },
+        ],
+        note: `O stock aumenta e é registada uma saída de ${formatarDinheiro(valor)} no Caixa.`,
+      },
     );
   }
 
@@ -458,12 +502,20 @@ export default function StockScreen() {
       return;
     }
     showAppAlert(
-      'Confirmar stock físico da tinta',
-      `Será definido o stock em ${quantidade} frasco(s), custo de ${custo.toFixed(2)} MT por frasco e aviso de reposição em ${minimo} frasco(s). Conte os frascos disponíveis; a quantidade antiga não será convertida automaticamente.`,
+      'Guardar stock da tinta?',
+      itemSelecionado.nome,
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Confirmar', onPress: confirmarConfiguracaoTinta },
+        { text: 'Guardar configuração', onPress: confirmarConfiguracaoTinta },
       ],
+      {
+        details: [
+          { label: 'Frascos disponíveis', value: formatarQuantidade(quantidade, 'frascos') },
+          { label: 'Avisar para repor com', value: formatarQuantidade(minimo, 'frascos') },
+          { label: 'Custo por frasco', value: formatarDinheiro(custo), destaque: true },
+        ],
+        note: 'A quantidade antiga não é convertida automaticamente. Não cria despesa nem altera o Caixa.',
+      },
     );
   }
 
@@ -475,12 +527,19 @@ export default function StockScreen() {
       return;
     }
     showAppAlert(
-      'Confirmar alteração do custo',
-      `${itemSelecionado.nome}\n\nCusto atual: ${itemSelecionado.custo_medio.toFixed(2)} MT/${itemSelecionado.unidade}\nNovo custo: ${novoCusto.toFixed(2)} MT/${itemSelecionado.unidade}\n\nO novo custo será usado nos próximos cálculos de produção. Os custos de impressões anteriores serão mantidos.`,
+      'Alterar o custo unitário?',
+      itemSelecionado.nome,
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Guardar', onPress: confirmarCustoUnitario },
+        { text: 'Guardar custo', onPress: confirmarCustoUnitario },
       ],
+      {
+        details: [
+          { label: 'Custo atual', value: formatarCustoUnitario(itemSelecionado.custo_medio, itemSelecionado.unidade) },
+          { label: 'Novo custo', value: formatarCustoUnitario(novoCusto, itemSelecionado.unidade), destaque: true },
+        ],
+        note: 'Vale para os próximos cálculos. Os custos das impressões anteriores mantêm-se.',
+      },
     );
   }
 
@@ -511,12 +570,25 @@ export default function StockScreen() {
       return;
     }
     showAppAlert(
-      'Confirmar desperdício',
-      `Deseja retirar ${quantidade} ${itemSelecionado.unidade} de ${itemSelecionado.nome} do stock?`,
+      'Registar desperdício?',
+      'O material perdido sai do stock.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Confirmar', onPress: confirmarDesperdicio },
-      ]
+        { text: 'Registar desperdício', onPress: confirmarDesperdicio },
+      ],
+      {
+        tone: 'warning',
+        details: [
+          { label: 'Material', value: itemSelecionado.nome },
+          { label: 'Quantidade perdida', value: formatarQuantidade(quantidade, itemSelecionado.unidade) },
+          ...(motivoDesperdicio.trim() ? [{ label: 'Motivo', value: motivoDesperdicio.trim() }] : []),
+          {
+            label: 'Stock após o registo',
+            value: formatarQuantidade(itemSelecionado.quantidade - quantidade, itemSelecionado.unidade),
+            destaque: true,
+          },
+        ],
+      },
     );
   }
 
@@ -558,12 +630,19 @@ export default function StockScreen() {
 
   function pedirConfirmacaoAplicacaoCustos() {
     showAppAlert(
-      'Aplicar calculadora de custos?',
-      'Papel A4: 0,70 MT/folha. Tinta Epson L3252: 200 MT por frasco. A tinta passará a ser controlada em frascos. Não altera quantidades, caixa nem custos dos pedidos antigos.',
+      'Aplicar os custos de referência?',
+      'Os valores abaixo passam a ser usados nas próximas impressões.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Aplicar', onPress: confirmarAplicacaoCustos },
-      ]
+        { text: 'Aplicar custos', onPress: confirmarAplicacaoCustos },
+      ],
+      {
+        details: [
+          { label: 'Papel A4', value: '0,70 MT por folha' },
+          { label: 'Tinta Epson L3252', value: '200,00 MT por frasco' },
+        ],
+        note: 'A tinta passa a ser controlada em frascos. Não altera quantidades, o Caixa nem os custos dos pedidos antigos.',
+      },
     );
   }
 
@@ -582,12 +661,26 @@ export default function StockScreen() {
       return;
     }
     showAppAlert(
-      'Confirmar correção',
-      `O stock de ${itemSelecionado.nome} será alterado de ${itemSelecionado.quantidade} para ${quantidade} ${itemSelecionado.unidade}.`,
+      'Corrigir o stock?',
+      'Use quando a contagem física não coincide com o sistema.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Confirmar', onPress: confirmarAjuste },
-      ]
+        { text: 'Guardar correção', onPress: confirmarAjuste },
+      ],
+      {
+        tone: 'warning',
+        details: [
+          { label: 'Material', value: itemSelecionado.nome },
+          { label: 'No sistema', value: formatarQuantidade(itemSelecionado.quantidade, itemSelecionado.unidade) },
+          { label: 'Contagem física', value: formatarQuantidade(quantidade, itemSelecionado.unidade) },
+          {
+            label: 'Diferença',
+            value: `${quantidade - itemSelecionado.quantidade > 0 ? '+' : ''}${formatarQuantidade(quantidade - itemSelecionado.quantidade, itemSelecionado.unidade)}`,
+            destaque: true,
+          },
+        ],
+        note: 'A diferença fica registada como ajuste de inventário (não conta como desperdício).',
+      },
     );
   }
 
@@ -951,7 +1044,7 @@ export default function StockScreen() {
             <TextInput style={styles.input} keyboardType="decimal-pad" placeholder={`Quantidade em ${itemSelecionado?.unidade ?? 'unidades'}`} value={quantidadeCompra} onChangeText={setQuantidadeCompra} />
             <Text style={styles.inputLabel}>Quanto pagou?</Text>
             <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Valor total em MT" value={valorCompra} onChangeText={setValorCompra} />
-            {Number(quantidadeCompra.replace(',', '.')) > 0 && Number(valorCompra.replace(',', '.')) > 0 && <View style={styles.calculationBox}><Text style={styles.calculationLabel}>Custo desta compra</Text><Text style={styles.calculationValue}>{(Number(valorCompra.replace(',', '.')) / Number(quantidadeCompra.replace(',', '.'))).toFixed(4)} MT/{itemSelecionado?.unidade}</Text></View>}
+            {Number(quantidadeCompra.replace(',', '.')) > 0 && Number(valorCompra.replace(',', '.')) > 0 && <View style={styles.calculationBox}><Text style={styles.calculationLabel}>Custo unitário desta compra</Text><Text style={styles.calculationValue}>{formatarCustoUnitario(Number(valorCompra.replace(',', '.')) / Number(quantidadeCompra.replace(',', '.')), itemSelecionado?.unidade ?? 'unidades')}</Text></View>}
             <ActionButton title="Confirmar compra" loading={processandoStock} onPress={pedirConfirmacaoCompra} style={styles.confirmButton} />
           </View>
         </View>

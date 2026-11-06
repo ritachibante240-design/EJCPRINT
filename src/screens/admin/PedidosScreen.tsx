@@ -279,8 +279,8 @@ export default function PedidosScreen() {
     if (!pedido) return;
     setPedidoSelecionadoEncadernacao(null);
     showAppAlert(
-      "Confirmar espiral compatível",
-      `${espiral.name}\nCapacidade confirmada: ${espiral.minimumSheets}–${espiral.maximumSheets} folhas físicas.\nStock: ${espiral.availableQuantity} unidade(s); necessário: ${pedido.numero_copias}.\n\nTambém serão descontadas ${pedido.numero_copias} capa(s) transparente(s) e ${pedido.numero_copias} capa(s) forte(s). O preço do cliente não muda.`,
+      "Iniciar encadernação?",
+      `Pedido ${pedido.numero}`,
       [
         { text: "Voltar", style: "cancel" },
         {
@@ -288,6 +288,17 @@ export default function PedidosScreen() {
           onPress: () => void confirmarInicioEncadernacao(pedido, espiral),
         },
       ],
+      {
+        details: [
+          { label: "Espiral", value: espiral.name },
+          { label: "Capacidade", value: `${espiral.minimumSheets}–${espiral.maximumSheets} folhas` },
+          { label: "Em stock", value: `${espiral.availableQuantity} unidade(s)` },
+          { label: "Espirais a usar", value: String(pedido.numero_copias) },
+          { label: "Capas transparentes", value: String(pedido.numero_copias) },
+          { label: "Capas fortes", value: String(pedido.numero_copias) },
+        ],
+        note: "Estes materiais saem do stock. O preço do cliente não muda.",
+      },
     );
   }
 
@@ -325,12 +336,22 @@ export default function PedidosScreen() {
       return;
     }
     showAppAlert(
-      'Confirmar anonimização do pedido',
-      'Serão removidos o nome, contacto, instruções, documento e comprovativos. Os valores e estados dos pagamentos serão mantidos para prestação de contas. Pedidos ainda recebidos ou em preparação serão cancelados; pedidos em impressão, prontos ou entregues mantêm o estado atual. O stock já consumido não será reposto.',
+      'Anonimizar os dados do cliente?',
+      'Esta ação não pode ser desfeita.',
       [
         { text: 'Voltar', style: 'cancel' },
-        { text: 'Anonimizar', onPress: () => void confirmarAnonimizacao(pedido) },
+        { text: 'Anonimizar dados', style: 'destructive', onPress: () => void confirmarAnonimizacao(pedido) },
       ],
+      {
+        tone: 'danger',
+        details: [
+          { label: 'Pedido', value: pedido.numero },
+          { label: 'Cliente', value: pedido.cliente },
+          { label: 'Removido', value: 'Nome, contacto, instruções, documento e comprovativos' },
+          { label: 'Mantido', value: 'Valores e estados dos pagamentos' },
+        ],
+        note: 'Pedidos recebidos ou em preparação são cancelados; os restantes mantêm o estado. O stock já consumido não é reposto.',
+      },
     );
   }
 
@@ -350,18 +371,29 @@ export default function PedidosScreen() {
     const novoEstado = estados[posicaoAtual + 1];
 
     showAppAlert(
-      "Alterar estado",
-      `${pedido.numero}\n\n` + `${pedido.estado}\n↓\n${novoEstado}`,
+      `${obterProximaAcao(pedido.estado, pedido.servico) || "Alterar estado"}?`,
+      `Pedido ${pedido.numero}`,
       [
+        { text: "Cancelar", style: "cancel" },
         {
-          text: "Cancelar",
-          style: "cancel",
-        },
-        {
-          text: "Confirmar",
+          text: obterProximaAcao(pedido.estado, pedido.servico) || "Confirmar",
           onPress: () => alterarEstado(pedido, novoEstado),
         },
       ],
+      {
+        details: [
+          { label: "Cliente", value: pedido.cliente },
+          { label: "Serviço", value: pedido.servico },
+          { label: "Estado atual", value: obterNomeEstado(pedido.estado, pedido.servico) },
+          { label: "Novo estado", value: obterNomeEstado(novoEstado, pedido.servico), destaque: true },
+        ],
+        note:
+          novoEstado === "Em impressão" && pedido.folhas_necessarias > 0
+            ? `Serão descontadas ${pedido.folhas_necessarias} folhas do stock de papel.`
+            : novoEstado === "Entregue"
+              ? "O pedido fica concluído."
+              : undefined,
+      },
     );
   }
 

@@ -131,12 +131,16 @@ export default function RelatoriosScreen() {
   function pedirRestauracao() {
     if (restaurando || criandoBackup) return;
     showAppAlert(
-      'Restaurar backup?',
-      'Os dados atuais serão substituídos pelos dados do backup selecionado.\n\nAntes disso, será criada uma cópia de segurança do banco atual.',
+      'Restaurar uma cópia de segurança?',
+      'Os dados atuais deste dispositivo serão substituídos pelos dados do backup que escolher a seguir.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Continuar', onPress: restaurarBackup },
+        { text: 'Escolher backup', style: 'destructive', onPress: restaurarBackup },
       ],
+      {
+        tone: 'danger',
+        note: 'Antes de restaurar, é criada automaticamente uma cópia de segurança dos dados atuais.',
+      },
     );
   }
 

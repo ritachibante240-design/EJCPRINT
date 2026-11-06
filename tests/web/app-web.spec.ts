@@ -299,7 +299,9 @@ test('mudar o estado de um pedido não fica preso à espera da sincronização',
   await page.getByText('Pedidos', { exact: true }).first().click();
   await page.getByText('Ver detalhes').first().click();
   await page.getByText('Iniciar preparação').first().click();
-  await page.getByText('Confirmar', { exact: true }).last().click();
+  const confirmacao = page.getByRole('alert');
+  await expect(confirmacao.getByText('Novo estado')).toBeVisible();
+  await confirmacao.getByText('Iniciar preparação', { exact: true }).click();
   await expect(page.getByText(/Pedido atualizado para/)).toBeVisible({ timeout: 15_000 });
 });
 
@@ -635,7 +637,9 @@ test('materiais: fechar a compra não abre outra janela e a saída manual pede c
   await expect(page.getByText('Informe a quantidade a retirar.')).toBeVisible();
   await page.getByLabel('Quantidade a retirar (folhas)').fill('10');
   await page.getByText('Registar saída', { exact: true }).click();
-  await page.getByText('Confirmar', { exact: true }).click();
+  const confirmacao = page.getByRole('alert');
+  await expect(confirmacao.getByText('1083 folhas')).toBeVisible();
+  await confirmacao.getByText('Registar saída', { exact: true }).click();
   await expect.poll(() => ajuste?.quantity).toBe(10);
   expect(ajuste?.direction).toBe('REMOVE');
 });
