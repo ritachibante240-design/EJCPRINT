@@ -16,27 +16,27 @@ export default function ServicosScreen({ navigation }: any) {
       <Text style={styles.description}>Escolha o serviço que precisa.</Text>
 
       <View style={styles.card}>
-        <View style={styles.iconBox}><Ionicons name="print-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Impressão P/B</Text><Text style={styles.price}>3 MT / página</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
+        <View style={styles.iconBox}><Ionicons name="print-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Impressão P/B</Text><Text style={styles.price}>3 MT / página</Text><Text style={styles.descricao}>Envia o documento (PDF ou Word) e imprimimos a preto e branco.</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
       </View>
 
       <View style={styles.card}>
-        <View style={styles.iconBox}><Ionicons name="copy-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Fotocópia P/B</Text><Text style={styles.price}>2 MT / página</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
+        <View style={styles.iconBox}><Ionicons name="copy-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Fotocópia P/B</Text><Text style={styles.price}>2 MT / página</Text><Text style={styles.descricao}>Traz o papel à papelaria e fazemos cópias a preto e branco.</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
       </View>
 
       <View style={styles.card}>
-        <View style={styles.iconBox}><Ionicons name="color-palette-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Colorida simples</Text><Text style={styles.price}>5 MT / página</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
+        <View style={styles.iconBox}><Ionicons name="color-palette-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Colorida simples</Text><Text style={styles.price}>5 MT / página</Text><Text style={styles.descricao}>Impressão a cores de texto, títulos, tabelas e gráficos simples.</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
       </View>
 
       <View style={styles.card}>
-        <View style={styles.iconBox}><Ionicons name="images-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Colorida com imagens</Text><Text style={styles.price}>10 MT / página</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
+        <View style={styles.iconBox}><Ionicons name="images-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Colorida com imagens</Text><Text style={styles.price}>10 MT / página</Text><Text style={styles.descricao}>Impressão a cores de páginas com fotografias ou imagens grandes.</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
       </View>
 
       <View style={styles.card}>
-        <View style={styles.iconBox}><Ionicons name="scan-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Digitalização</Text><Text style={styles.price}>15 MT / página · documento em papel para ficheiro</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
+        <View style={styles.iconBox}><Ionicons name="scan-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Digitalização</Text><Text style={styles.price}>15 MT / página</Text><Text style={styles.descricao}>Passamos o seu papel (BI, certificado, documento assinado) para PDF ou imagem. Traga o original.</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
       </View>
 
       <View style={styles.card}>
-        <View style={styles.iconBox}><Ionicons name="create-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Digitação</Text><Text style={styles.price}>15 MT / página · documento preparado a partir de tema e instruções</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
+        <View style={styles.iconBox}><Ionicons name="create-outline" size={25} color={colors.brand} /></View><View style={styles.serviceInfo}><Text style={styles.service}>Digitação</Text><Text style={styles.price}>15 MT / página</Text><Text style={styles.descricao}>Escrevemos o seu texto no computador (carta, requerimento, trabalho) e entregamos em PDF ou Word.</Text></View><Ionicons name="chevron-forward" size={21} color={colors.subtle} />
       </View>
 
       <View style={styles.priceGuide}>
@@ -113,6 +113,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 15,
   },
+  descricao: { marginTop: 4, color: colors.text, fontSize: 13, lineHeight: 18 },
   bottomBar: { height: 72, flexDirection: 'row', backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, paddingBottom: spacing.sm },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
   bottomActive: { color: colors.brand, fontSize: 11, fontWeight: fontWeights.bold },

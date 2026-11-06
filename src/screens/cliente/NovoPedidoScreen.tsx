@@ -42,14 +42,14 @@ import {
 } from "../../utils/paginas";
 import { TipoPagamento } from "../../services/pagamentoService";
 
-type Servico = { id: number; nome: string; preco: number };
+type Servico = { id: number; nome: string; preco: number; descricao: string };
 const servicos: Servico[] = [
-  { id: 1, nome: "Fotocópia P/B", preco: 2 },
-  { id: 2, nome: "Impressão P/B", preco: 3 },
-  { id: 3, nome: "Colorida simples", preco: 5 },
-  { id: 4, nome: "Colorida com imagens", preco: 10 },
-  { id: 5, nome: "Digitalização", preco: 15 },
-  { id: 6, nome: "Digitação", preco: 15 },
+  { id: 1, nome: "Fotocópia P/B", preco: 2 , descricao: "Traz o papel à papelaria e fazemos cópias a preto e branco." },
+  { id: 2, nome: "Impressão P/B", preco: 3 , descricao: "Envia o documento (PDF ou Word) e imprimimos a preto e branco." },
+  { id: 3, nome: "Colorida simples", preco: 5 , descricao: "Impressão a cores de texto, títulos, tabelas e gráficos simples." },
+  { id: 4, nome: "Colorida com imagens", preco: 10 , descricao: "Impressão a cores de páginas com fotografias ou imagens grandes." },
+  { id: 5, nome: "Digitalização", preco: 15 , descricao: "Passamos o seu papel (BI, certificado, documento assinado) para PDF ou imagem. Traga o original." },
+  { id: 6, nome: "Digitação", preco: 15 , descricao: "Escrevemos o seu texto no computador (carta, requerimento, trabalho) e entregamos em PDF ou Word." },
 ];
 
 function calcularPrecoEncadernacao(folhasPorExemplar: number): number | null {
@@ -525,6 +525,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                   </View>
                   <View style={styles.serviceInfo}>
                     <Text style={styles.serviceTitle}>{s.nome}</Text>
+                    <Text style={styles.serviceDescription}>{s.descricao}</Text>
                     <Text style={styles.servicePrice}>{s.preco} MT/página</Text>
                   </View>
                   <Ionicons
@@ -685,7 +686,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                   setNumeroPaginas(texto);
                   setImprimirTudo(true);
                 }}
-                placeholder="quantidade de páginas"
+                placeholder="Número de páginas"
               />
             )}
             {ehImpressao && documentoValido && !contandoPaginas && (
@@ -713,7 +714,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                       keyboardType="number-pad"
                       value={intervaloInicio}
                       onChangeText={setIntervaloInicio}
-                      placeholder="início"
+                      placeholder="Primeira"
                     />
                     <Text>à</Text>
                     <TextInput
@@ -721,7 +722,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
                       keyboardType="number-pad"
                       value={intervaloFim}
                       onChangeText={setIntervaloFim}
-                      placeholder="fim"
+                      placeholder="Última"
                     />
                   </View>
                 )}
@@ -746,13 +747,13 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 {algumasACores && (
                   <>
                     <Text style={styles.helperText}>
-                      As páginas indicadas pagam o preço a cores e as restantes {precoImpressaoPB} MT (P/B).
+                      Indique os números das páginas a cores, separados por vírgulas; para páginas seguidas use um hífen (1-3). As páginas indicadas pagam o preço a cores e as restantes {precoImpressaoPB} MT (P/B).
                     </Text>
                     <TextInput
                       style={styles.input}
                       value={paginasCoresTexto}
                       onChangeText={setPaginasCoresTexto}
-                      placeholder="ex.: 1, 5, 8-10"
+                      placeholder="Páginas a cores"
                     />
                     {!ehServicoColorido && (
                       <View style={styles.typeRow}>
@@ -1119,6 +1120,7 @@ const styles = StyleSheet.create({
   serviceInfo: { flex: 1, marginLeft: spacing.md },
   serviceTitle: { color: colors.brand, fontWeight: fontWeights.bold },
   servicePrice: { color: colors.muted, marginTop: 3 },
+  serviceDescription: { color: colors.text, fontSize: 13, lineHeight: 18, marginTop: 3 },
   primary: {
     backgroundColor: colors.brand,
     minHeight: 55,

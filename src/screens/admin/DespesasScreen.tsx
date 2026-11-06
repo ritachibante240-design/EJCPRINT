@@ -152,7 +152,7 @@ export default function DespesasScreen() {
 
 						<TextInput
 							style={styles.input}
-							placeholder="Ex.: Compra de uma resma A4"
+							placeholder="Descrição da despesa"
 							value={descricao}
 							onChangeText={setDescricao}
 						/>
@@ -219,7 +219,7 @@ export default function DespesasScreen() {
 
 						<TextInput
 							style={styles.input}
-							placeholder="Ex.: 350"
+							placeholder="Valor em MT"
 							keyboardType="decimal-pad"
 							value={valor}
 							onChangeText={setValor}

@@ -26,7 +26,12 @@ async function fetchRemoto<T>(path: string, init?: RequestInit, obrigatorio = fa
     });
 
     if (!resposta.ok) {
-      throw new Error(`HTTP ${resposta.status}`);
+      const corpo = (await resposta.json().catch(() => null)) as { message?: unknown } | null;
+      const mensagem = Array.isArray(corpo?.message) ? corpo.message.join(' ') : corpo?.message;
+      if (resposta.status >= 500) {
+        throw new Error('O servidor não conseguiu concluir a operação e nada foi alterado. Tente novamente dentro de instantes.');
+      }
+      throw new Error(typeof mensagem === 'string' && mensagem ? mensagem : `O servidor recusou o pedido (${resposta.status}).`);
     }
 
     return (await resposta.json()) as T;
@@ -214,7 +219,8 @@ export async function registrarCompraStock(
 
 export async function removerStock(
   id: number | string,
-  quantidade: number
+  quantidade: number,
+  motivo?: string
 ) {
   if (!Number.isFinite(quantidade) || quantidade <= 0) {
     throw new Error('Quantidade inválida.');
@@ -226,7 +232,7 @@ export async function removerStock(
     body: JSON.stringify({
       direction: 'REMOVE',
       quantity: quantidade,
-      reason: 'Remoção manual de stock',
+      reason: motivo ? `Saída manual: ${motivo}` : 'Saída manual de stock',
       externalReference: `stock-remove-${id}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     }),
   });

@@ -354,7 +354,7 @@ export default function VendasScreen() {
 
 						<TextInput
 							style={styles.input}
-							placeholder="Ex.: 150"
+							placeholder="Valor em MT"
 							keyboardType="decimal-pad"
 							value={valor}
 							onChangeText={setValor}

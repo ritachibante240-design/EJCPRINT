@@ -138,7 +138,7 @@ async function criarPedidoCliente(page: Page, nome = 'Cliente de Teste') {
   const [escolha] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Adicionar documento').click()]);
   await escolha.setFiles(DOCUMENTO);
   await expect(page.getByText('documento-5mb.pdf')).toBeVisible();
-  await page.getByPlaceholder('quantidade de páginas').fill('10');
+  await page.getByPlaceholder('Número de páginas').fill('10');
   await page.getByText('Continuar', { exact: true }).last().click();
   await page.getByPlaceholder('Nome Completo').fill(nome);
   await page.getByPlaceholder('WhatsApp / contacto').fill('840000000');
@@ -392,7 +392,7 @@ test('fotocópia: o cliente é avisado para levar o original e o admin vê "Agua
   await page.getByText('Fotocópia P/B').first().click();
   await expect(page.getByText(aviso)).toBeVisible();
   await page.getByText('Continuar', { exact: true }).first().click();
-  await page.getByPlaceholder('quantidade de páginas').fill('4');
+  await page.getByPlaceholder('Número de páginas').fill('4');
   await page.getByText('Continuar', { exact: true }).last().click();
   await expect(page.getByText(aviso)).toBeVisible();
   await page.getByPlaceholder('Nome Completo').fill('Cliente Fotocópia');
@@ -438,7 +438,7 @@ test('digitação: o cliente escolhe formato e entrega, o servidor recebe-os e o
   await page.getByText('Digitação', { exact: true }).first().click();
   await page.getByText('Continuar', { exact: true }).first().click();
   await page.getByPlaceholder('Escreva o tema e as instruções').fill('Digitar a carta manuscrita, letra Arial 12.');
-  await page.getByPlaceholder('quantidade de páginas').fill('3');
+  await page.getByPlaceholder('Número de páginas').fill('3');
   await expect(page.getByText('Encadernação (opcional)')).toHaveCount(0);
   await expect(page.getByText('Frente e verso')).toHaveCount(0);
   await page.getByText('Word (DOCX)').click();
@@ -490,7 +490,7 @@ test('PDF: as páginas são contadas sozinhas e o preço junta intervalo e pági
   const [escolha] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Adicionar documento').click()]);
   await escolha.setFiles(PDF_6_PAGINAS);
   await expect(page.getByText('6 páginas (contadas automaticamente no PDF)')).toBeVisible();
-  await expect(page.getByPlaceholder('quantidade de páginas')).toHaveCount(0);
+  await expect(page.getByPlaceholder('Número de páginas')).toHaveCount(0);
 
   // Pré-visualização abre o PDF num separador novo.
   const [previa] = await Promise.all([context.waitForEvent('page'), page.getByText('Pré-visualizar o documento').click()]);
@@ -498,12 +498,12 @@ test('PDF: as páginas são contadas sozinhas e o preço junta intervalo e pági
   await previa.close();
 
   await page.getByText('Só algumas', { exact: true }).first().click();
-  await page.getByPlaceholder('início').fill('2');
-  await page.getByPlaceholder('fim').fill('5');
+  await page.getByPlaceholder('Primeira').fill('2');
+  await page.getByPlaceholder('Última').fill('5');
   await page.getByText('Só algumas', { exact: true }).last().click();
-  await page.getByPlaceholder('ex.: 1, 5, 8-10').fill('1');
+  await page.getByPlaceholder('Páginas a cores').fill('1');
   await expect(page.getByText('A página 1 está fora das páginas a imprimir (2 a 5).')).toBeVisible();
-  await page.getByPlaceholder('ex.: 1, 5, 8-10').fill('3');
+  await page.getByPlaceholder('Páginas a cores').fill('3');
   await page.getByText('Continuar', { exact: true }).last().click();
 
   // 3 páginas P/B × 3 MT + 1 página colorida simples × 5 MT = 14 MT
@@ -537,7 +537,7 @@ test('Word: o cliente é avisado e o admin vê "confirmar páginas e formataçã
   const [escolha] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Adicionar documento').click()]);
   await escolha.setFiles(DOCUMENTO_WORD);
   await expect(page.getByText('Ficheiro Word:', { exact: false })).toBeVisible();
-  await page.getByPlaceholder('quantidade de páginas').fill('2');
+  await page.getByPlaceholder('Número de páginas').fill('2');
   await page.getByText('Continuar', { exact: true }).last().click();
   await page.getByPlaceholder('Nome Completo').fill('Cliente Word');
   await page.getByPlaceholder('WhatsApp / contacto').fill('840000000');
@@ -602,4 +602,40 @@ test('Word: as páginas guardadas no .docx são lidas sozinhas e não há pré-v
   await expect(page.getByText('O navegador não consegue pré-visualizar ficheiros Word.', { exact: false })).toBeVisible();
   await page.getByText('Continuar', { exact: true }).last().click();
   await expect(page.getByText('21.00 MT')).toBeVisible();
+});
+
+test('materiais: fechar a compra não abre outra janela e a saída manual pede confirmação', async ({ context, page }) => {
+  let ajuste: Record<string, unknown> | undefined;
+  const papel = {
+    id: 'papel-a4', name: 'Papel A4', category: 'Papel', unit: 'folhas',
+    quantity: 1093, minimumQuantity: 700, averageUnitCost: 0.7, updatedAt: new Date().toISOString(),
+  };
+  await simularApi(context, (metodo, caminho, route) => {
+    if (metodo === 'GET' && caminho === '/api/inventory/items') return { corpo: [papel] };
+    if (metodo === 'POST' && caminho === '/api/inventory/items/papel-a4/adjustments') {
+      ajuste = route.request().postDataJSON() as Record<string, unknown>;
+      return { status: 201, corpo: { ...papel, quantity: 1083 } };
+    }
+    return undefined;
+  });
+  await entrarComoAdmin(page);
+  await page.getByText('Materiais', { exact: true }).first().click();
+  await expect(page.getByText('Papel A4', { exact: true }).first()).toBeVisible();
+
+  await page.getByText('Comprar', { exact: true }).click();
+  await expect(page.getByText('Comprar material')).toBeVisible();
+  await page.getByLabel('Fechar').first().click();
+  await expect(page.getByText('Comprar material')).toBeHidden();
+  await expect(page.getByText('Saída manual', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Stock atual:', { exact: false })).toHaveCount(0);
+
+  await page.getByLabel('Mais opções para Papel A4').click();
+  await page.getByText('Saída manual', { exact: true }).click();
+  await page.getByText('Registar saída', { exact: true }).click();
+  await expect(page.getByText('Informe a quantidade a retirar.')).toBeVisible();
+  await page.getByLabel('Quantidade a retirar (folhas)').fill('10');
+  await page.getByText('Registar saída', { exact: true }).click();
+  await page.getByText('Confirmar', { exact: true }).click();
+  await expect.poll(() => ajuste?.quantity).toBe(10);
+  expect(ajuste?.direction).toBe('REMOVE');
 });

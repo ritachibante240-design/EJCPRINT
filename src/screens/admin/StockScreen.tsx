@@ -77,7 +77,6 @@ export default function StockScreen() {
   const [quantidade, setQuantidade] = useState('');
   const [stockMinimo, setStockMinimo] = useState('');
 
-  const [movimento, setMovimento] = useState('');
   const [valorCompra, setValorCompra] = useState('');
   const [quantidadeCompra, setQuantidadeCompra] = useState('');
   const [valorCustoUnitario, setValorCustoUnitario] = useState('');
@@ -89,11 +88,78 @@ export default function StockScreen() {
   const [quantidadeDesperdicio, setQuantidadeDesperdicio] = useState('');
   const [motivoDesperdicio, setMotivoDesperdicio] = useState('');
   const [quantidadeReal, setQuantidadeReal] = useState('');
-  const [compraAtiva, setCompraAtiva] = useState(false);
-  const [perdaAtiva, setPerdaAtiva] = useState(false);
-  const [motivoPerda, setMotivoPerda] = useState('');
-  const [pedidoIdPerda, setPedidoIdPerda] = useState('');
   const [processandoStock, setProcessandoStock] = useState(false);
+  const [modalSaida, setModalSaida] = useState(false);
+  const [quantidadeSaida, setQuantidadeSaida] = useState('');
+  const [motivoSaida, setMotivoSaida] = useState('');
+
+  /** Fecha um formulário e larga o material escolhido (evita que outra janela abra sozinha). */
+  function fecharModal(fechar: (aberto: boolean) => void) {
+    fechar(false);
+    setItemSelecionado(null);
+  }
+
+  function abrirSaida(item: ItemStock) {
+    setItemSelecionado(item);
+    setQuantidadeSaida('');
+    setMotivoSaida('');
+    setModalSaida(true);
+  }
+
+  function abrirDesperdicio(item: ItemStock) {
+    setItemSelecionado(item);
+    setQuantidadeDesperdicio('');
+    setMotivoDesperdicio('');
+    setModalDesperdicio(true);
+  }
+
+  async function confirmarSaida() {
+    if (processandoStock || !itemSelecionado) return;
+    const quantidade = Number(quantidadeSaida.replace(',', '.'));
+    try {
+      setProcessandoStock(true);
+      const { nome, unidade } = itemSelecionado;
+      await removerStock(itemSelecionado.id, quantidade, motivoSaida.trim() || undefined);
+      setModalSaida(false);
+      setQuantidadeSaida('');
+      setMotivoSaida('');
+      setItemSelecionado(null);
+      await carregar();
+      showAppAlert('Saída registada', `${quantidade} ${unidade} de ${nome} retiradas do stock.`);
+    } catch (erro) {
+      showAppAlert('Erro', erro instanceof Error ? erro.message : 'Não foi possível registar a saída.');
+    } finally {
+      setProcessandoStock(false);
+    }
+  }
+
+  function pedirConfirmacaoSaida() {
+    if (!itemSelecionado || processandoStock) return;
+    const quantidade = Number(quantidadeSaida.replace(',', '.'));
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      showAppAlert('Quantidade inválida', 'Informe a quantidade a retirar.');
+      return;
+    }
+    if (itemSelecionado.unidade.trim().toLocaleLowerCase() === 'folhas' && !Number.isSafeInteger(quantidade)) {
+      showAppAlert('Quantidade inválida', 'A quantidade de folhas deve ser um número inteiro.');
+      return;
+    }
+    if (quantidade > itemSelecionado.quantidade) {
+      showAppAlert(
+        'Stock insuficiente',
+        `Só existem ${itemSelecionado.quantidade} ${itemSelecionado.unidade} de ${itemSelecionado.nome}.`,
+      );
+      return;
+    }
+    showAppAlert(
+      'Confirmar saída',
+      `Retirar ${quantidade} ${itemSelecionado.unidade} de ${itemSelecionado.nome} do stock?${motivoSaida.trim() ? `\n\nMotivo: ${motivoSaida.trim()}` : ''}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Confirmar', onPress: confirmarSaida },
+      ],
+    );
+  }
 
   async function carregar() {
     try {
@@ -266,77 +332,6 @@ export default function StockScreen() {
     }
   }
 
-  async function comprarMaterial() {
-    const item = itemSelecionado;
-    if (!item) {
-      return;
-    }
-
-    const quantidadeNumero = Number(
-      movimento.replace(',', '.')
-    );
-    const valorNumero = Number(
-      valorCompra.replace(',', '.')
-    );
-
-    if (!Number.isFinite(quantidadeNumero) || quantidadeNumero <= 0) {
-      showAppAlert(
-        'Atenção',
-        'Informe a quantidade comprada.'
-      );
-      return;
-    }
-
-    if (
-      item.unidade.trim().toLocaleLowerCase() === 'folhas' &&
-      !Number.isSafeInteger(quantidadeNumero)
-    ) {
-      showAppAlert(
-        'Atenção',
-        'A quantidade de folhas deve ser um número inteiro.'
-      );
-      return;
-    }
-
-    if (!Number.isFinite(valorNumero) || valorNumero <= 0) {
-      showAppAlert(
-        'Atenção',
-        'Informe o valor total da compra.'
-      );
-      return;
-    }
-
-    try {
-      await registrarCompraStock(
-        item.id,
-        quantidadeNumero,
-        valorNumero
-      );
-
-      setItemSelecionado(null);
-      setMovimento('');
-      setValorCompra('');
-      setCompraAtiva(false);
-      setPerdaAtiva(false);
-      setMotivoPerda('');
-      setPedidoIdPerda('');
-
-      await carregar();
-
-      showAppAlert(
-        'Compra registada',
-        `${quantidadeNumero} ${item.unidade} adicionadas ao stock por ${valorNumero.toFixed(2)} MT.`
-      );
-    } catch (erro) {
-      showAppAlert(
-        'Erro',
-        erro instanceof Error
-          ? erro.message
-          : 'Não foi possível registar a compra.'
-      );
-    }
-  }
-
   async function confirmarCompra() {
     if (processandoStock || !itemSelecionado) return;
     const quantidadeNumero = Number(quantidadeCompra.replace(',', '.'));
@@ -496,7 +491,7 @@ export default function StockScreen() {
       showAppAlert('Quantidade inválida', 'Informe uma quantidade inteira maior que zero.'); return;
     }
     if (!motivoDesperdicio.trim()) {
-      showAppAlert('Informe o motivo', 'Ex.: folha manchada ou papel danificado.'); return;
+      showAppAlert('Informe o motivo', 'Descreva o que aconteceu ao material.'); return;
     }
     try {
       setProcessandoStock(true);
@@ -602,85 +597,6 @@ export default function StockScreen() {
     setModalAjuste(true);
   }
 
-  async function movimentar(
-    tipo: 'saida' | 'perda'
-  ) {
-    const item = itemSelecionado;
-
-    if (!item) {
-      return;
-    }
-
-    const valor = Number(
-      movimento.replace(',', '.')
-    );
-
-    if (!Number.isFinite(valor) || valor <= 0) {
-      showAppAlert(
-        'Atenção',
-        'Informe uma quantidade válida.'
-      );
-      return;
-    }
-
-    const pedidoIdInformado = pedidoIdPerda.trim();
-    const pedidoId = pedidoIdInformado
-      ? Number(pedidoIdInformado)
-      : undefined;
-
-    if (
-      tipo === 'perda' &&
-      pedidoIdInformado &&
-      (!Number.isSafeInteger(pedidoId) || (pedidoId ?? 0) <= 0)
-    ) {
-      showAppAlert(
-        'Atenção',
-        'Informe um ID numérico válido para o pedido.'
-      );
-      return;
-    }
-
-    try {
-      if (tipo === 'perda') {
-        await registrarDesperdicio(
-          item.id,
-          valor,
-          motivoPerda,
-          pedidoId
-        );
-      } else {
-        await removerStock(
-          item.id,
-          valor
-        );
-      }
-
-      setItemSelecionado(null);
-      setMovimento('');
-      setValorCompra('');
-      setCompraAtiva(false);
-      setPerdaAtiva(false);
-      setMotivoPerda('');
-      setPedidoIdPerda('');
-
-      await carregar();
-
-      showAppAlert(
-        'Stock atualizado',
-        tipo === 'perda'
-          ? `Perda/Desperdício registada: ${valor} ${item.unidade}.`
-          : 'Saída manual registada.'
-      );
-    } catch (erro) {
-      showAppAlert(
-        'Erro',
-        erro instanceof Error
-          ? erro.message
-          : 'Não foi possível atualizar o stock.'
-      );
-    }
-  }
-
   function renderItem({
     item,
   }: {
@@ -775,23 +691,9 @@ export default function StockScreen() {
             accessibilityLabel={`Mais opções para ${item.nome}`}
             style={styles.moreButton}
             onPress={() => {
-              setItemSelecionado(item);
               showAppAlert(item.nome, 'Escolha uma opção', [
-                {
-                  text: 'Registar desperdício',
-                  onPress: () => {
-                    setQuantidadeDesperdicio('');
-                    setMotivoDesperdicio('');
-                    setModalDesperdicio(true);
-                  },
-                },
-                {
-                  text: 'Ver histórico',
-                  onPress: () => showAppAlert(
-                    'Histórico',
-                    'Os movimentos deste material são guardados automaticamente.',
-                  ),
-                },
+                { text: 'Saída manual', onPress: () => abrirSaida(item) },
+                { text: 'Registar desperdício', onPress: () => abrirDesperdicio(item) },
                 { text: 'Cancelar', style: 'cancel' },
               ]);
             }}
@@ -917,7 +819,7 @@ export default function StockScreen() {
             <Text style={styles.formLabel}>Nome do material</Text>
             <TextInput
               style={styles.input}
-              placeholder="Ex.: Papel A4"
+              placeholder="Nome do material"
               value={nome}
               onChangeText={alterarNomeMaterial}
             />
@@ -1009,163 +911,53 @@ export default function StockScreen() {
         </View>
       </Modal>
 
-      {/* MOVIMENTAÇÃO */}
-
-      <Modal
-        visible={itemSelecionado !== null && !modalCompra && !modalCustoUnitario && !modalConfigurarTinta && !modalDesperdicio && !modalAjuste}
-        transparent
-        animationType="fade"
-        onRequestClose={() =>
-          setItemSelecionado(null)
-        }
-      >
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>
-              {itemSelecionado?.nome}
+      <Modal visible={modalSaida} transparent animationType="slide" onRequestClose={() => fecharModal(setModalSaida)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Saída manual</Text>
+                <Text style={styles.modalSubtitle}>
+                  {itemSelecionado?.nome} · Stock atual: {itemSelecionado?.quantidade} {itemSelecionado?.unidade}
+                </Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => fecharModal(setModalSaida)}>
+                <Ionicons name="close" size={28} color={colors.brand} />
+              </Pressable>
+            </View>
+            <Text style={styles.initialCostHint}>
+              Use para material retirado fora dos pedidos (uso interno, oferta, transferência). Material estragado deve ser registado como desperdício.
             </Text>
-
-            <Text style={styles.currentStock}>
-              Stock atual: {itemSelecionado?.quantidade}{' '}
-              {itemSelecionado?.unidade}
-            </Text>
-
+            <Text style={styles.inputLabel}>Quantidade a retirar ({itemSelecionado?.unidade})</Text>
             <TextInput
               style={styles.input}
-              placeholder={`Quantidade em ${itemSelecionado?.unidade ?? 'unidades'}`}
-              keyboardType="decimal-pad"
-              value={movimento}
-              onChangeText={setMovimento}
+              keyboardType={itemSelecionado?.unidade.trim().toLocaleLowerCase() === 'folhas' ? 'number-pad' : 'decimal-pad'}
+              accessibilityLabel={`Quantidade a retirar (${itemSelecionado?.unidade ?? ''})`}
+              value={quantidadeSaida}
+              onChangeText={setQuantidadeSaida}
             />
-
-            {compraAtiva ? (
-              <>
-                <Text style={styles.modalLabel}>
-                  Valor total da compra
-                </Text>
-
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ex.: 350"
-                  keyboardType="decimal-pad"
-                  value={valorCompra}
-                  onChangeText={setValorCompra}
-                />
-
-                <Pressable
-                  style={styles.entryButton}
-                  onPress={comprarMaterial}
-                >
-                  <Text style={styles.primaryText}>
-                    Confirmar compra
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setCompraAtiva(false)}
-                >
-                  <Text style={styles.cancel}>
-                    Voltar
-                  </Text>
-                </Pressable>
-              </>
-            ) : perdaAtiva ? (
-              <>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Motivo (ex.: folhas manchadas)"
-                  value={motivoPerda}
-                  onChangeText={setMotivoPerda}
-                />
-
-                <TextInput
-                  style={styles.input}
-                  placeholder="ID numérico do pedido (opcional)"
-                  keyboardType="number-pad"
-                  value={pedidoIdPerda}
-                  onChangeText={setPedidoIdPerda}
-                />
-
-                <Pressable
-                  style={styles.lossButton}
-                  onPress={() => movimentar('perda')}
-                >
-                  <Text style={styles.primaryText}>
-                    Confirmar Perda/Desperdício
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setPerdaAtiva(false)}
-                >
-                  <Text style={styles.cancel}>
-                    Voltar
-                  </Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Pressable
-                  style={styles.entryButton}
-                  onPress={() => {
-                    setMovimento('');
-                    setValorCompra('');
-                    setCompraAtiva(true);
-                  }}
-                >
-                  <Text style={styles.primaryText}>
-                    + Registar compra
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.exitButton}
-                  onPress={() => movimentar('saida')}
-                >
-                  <Text style={styles.primaryText}>
-                    − Saída manual
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.lossButton}
-                  onPress={() => setPerdaAtiva(true)}
-                >
-                  <Text style={styles.primaryText}>
-                    Perda/Desperdício
-                  </Text>
-                </Pressable>
-              </>
-            )}
-
-            <Pressable
-              onPress={() =>
-                setItemSelecionado(null)
-              }
-            >
-              <Text style={styles.cancel}>
-                Cancelar
-              </Text>
-            </Pressable>
+            <Text style={styles.inputLabel}>Motivo (opcional)</Text>
+            <TextInput style={styles.input} accessibilityLabel="Motivo da saída" value={motivoSaida} onChangeText={setMotivoSaida} maxLength={120} />
+            <ActionButton title="Registar saída" loading={processandoStock} onPress={pedirConfirmacaoSaida} style={styles.confirmButton} />
           </View>
         </View>
       </Modal>
 
-      <Modal visible={modalCompra} transparent animationType="slide" onRequestClose={() => setModalCompra(false)}>
+      <Modal visible={modalCompra} transparent animationType="slide" onRequestClose={() => fecharModal(setModalCompra)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}><View><Text style={styles.modalTitle}>Comprar material</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text></View><Pressable onPress={() => setModalCompra(false)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable></View>
+            <View style={styles.modalHeader}><View><Text style={styles.modalTitle}>Comprar material</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => fecharModal(setModalCompra)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable></View>
             <Text style={styles.inputLabel}>Quantidade comprada</Text>
-            <TextInput style={styles.input} keyboardType="decimal-pad" placeholder={`Ex.: 500 ${itemSelecionado?.unidade ?? ''}`} value={quantidadeCompra} onChangeText={setQuantidadeCompra} />
+            <TextInput style={styles.input} keyboardType="decimal-pad" placeholder={`Quantidade em ${itemSelecionado?.unidade ?? 'unidades'}`} value={quantidadeCompra} onChangeText={setQuantidadeCompra} />
             <Text style={styles.inputLabel}>Quanto pagou?</Text>
-            <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Ex.: 350 MT" value={valorCompra} onChangeText={setValorCompra} />
+            <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Valor total em MT" value={valorCompra} onChangeText={setValorCompra} />
             {Number(quantidadeCompra.replace(',', '.')) > 0 && Number(valorCompra.replace(',', '.')) > 0 && <View style={styles.calculationBox}><Text style={styles.calculationLabel}>Custo desta compra</Text><Text style={styles.calculationValue}>{(Number(valorCompra.replace(',', '.')) / Number(quantidadeCompra.replace(',', '.'))).toFixed(4)} MT/{itemSelecionado?.unidade}</Text></View>}
             <ActionButton title="Confirmar compra" loading={processandoStock} onPress={pedirConfirmacaoCompra} style={styles.confirmButton} />
           </View>
         </View>
       </Modal>
 
-      <Modal visible={modalCustoUnitario} transparent animationType="slide" onRequestClose={() => setModalCustoUnitario(false)}>
+      <Modal visible={modalCustoUnitario} transparent animationType="slide" onRequestClose={() => fecharModal(setModalCustoUnitario)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -1173,7 +965,7 @@ export default function StockScreen() {
                 <Text style={styles.modalTitle}>Editar custo unitário</Text>
                 <Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
               </View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setModalCustoUnitario(false)}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => fecharModal(setModalCustoUnitario)}>
                 <Ionicons name="close" size={28} color={colors.brand} />
               </Pressable>
             </View>
@@ -1181,7 +973,7 @@ export default function StockScreen() {
             <TextInput
               style={styles.input}
               keyboardType="decimal-pad"
-              placeholder="Ex.: 0,70"
+              placeholder="0,00"
               value={valorCustoUnitario}
               onChangeText={setValorCustoUnitario}
             />
@@ -1191,7 +983,7 @@ export default function StockScreen() {
         </View>
       </Modal>
 
-      <Modal visible={modalConfigurarTinta} transparent animationType="slide" onRequestClose={() => setModalConfigurarTinta(false)}>
+      <Modal visible={modalConfigurarTinta} transparent animationType="slide" onRequestClose={() => fecharModal(setModalConfigurarTinta)}>
         <View style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.configInkOverlay} keyboardShouldPersistTaps="handled">
             <View style={styles.modalContent}>
@@ -1200,17 +992,17 @@ export default function StockScreen() {
                   <Text style={styles.modalTitle}>Configurar tinta em frascos</Text>
                   <Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
                 </View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setModalConfigurarTinta(false)}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => fecharModal(setModalConfigurarTinta)}>
                   <Ionicons name="close" size={28} color={colors.brand} />
                 </Pressable>
               </View>
               <Text style={styles.initialCostHint}>Conte o total de frascos que quer controlar neste stock único. A quantidade anterior, que pode estar em pacotes, não será convertida automaticamente.</Text>
               <Text style={styles.inputLabel}>Frascos disponíveis agora</Text>
-              <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Ex.: 2" value={quantidadeFrascos} onChangeText={setQuantidadeFrascos} />
+              <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Número de frascos" value={quantidadeFrascos} onChangeText={setQuantidadeFrascos} />
               <Text style={styles.inputLabel}>Avisar para repor quando restarem</Text>
-              <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Ex.: 1" value={minimoFrascos} onChangeText={setMinimoFrascos} />
+              <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Número de frascos" value={minimoFrascos} onChangeText={setMinimoFrascos} />
               <Text style={styles.inputLabel}>Custo de um frasco (MT)</Text>
-              <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="Ex.: 200,00" value={custoPorFrasco} onChangeText={setCustoPorFrasco} />
+              <TextInput style={styles.input} keyboardType="decimal-pad" placeholder="0,00" value={custoPorFrasco} onChangeText={setCustoPorFrasco} />
               <Text style={styles.initialCostHint}>Esta configuração regista uma contagem/custo inicial; não cria despesa nem altera o Caixa.</Text>
               <ActionButton title="Guardar configuração" loading={processandoStock} onPress={pedirConfirmacaoConfiguracaoTinta} style={styles.confirmButton} />
             </View>
@@ -1218,7 +1010,7 @@ export default function StockScreen() {
         </View>
       </Modal>
 
-      <Modal visible={modalCapacidadeEspiral} transparent animationType="slide" onRequestClose={() => setModalCapacidadeEspiral(false)}>
+      <Modal visible={modalCapacidadeEspiral} transparent animationType="slide" onRequestClose={() => fecharModal(setModalCapacidadeEspiral)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -1226,7 +1018,7 @@ export default function StockScreen() {
                 <Text style={styles.modalTitle}>Compatibilidade da espiral</Text>
                 <Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
               </View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setModalCapacidadeEspiral(false)}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => fecharModal(setModalCapacidadeEspiral)}>
                 <Ionicons name="close" size={28} color={colors.brand} />
               </Pressable>
             </View>
@@ -1237,7 +1029,7 @@ export default function StockScreen() {
             <TextInput
               style={styles.input}
               keyboardType="number-pad"
-              placeholder="Ex.: 1"
+              placeholder="Número de folhas"
               value={minimoFolhasEspiral}
               onChangeText={setMinimoFolhasEspiral}
             />
@@ -1245,7 +1037,7 @@ export default function StockScreen() {
             <TextInput
               style={styles.input}
               keyboardType="number-pad"
-              placeholder="Conforme embalagem/fornecedor"
+              placeholder="Número de folhas"
               value={maximoFolhasEspiral}
               onChangeText={setMaximoFolhasEspiral}
             />
@@ -1259,7 +1051,7 @@ export default function StockScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <View><Text style={styles.modalTitle}>Calculadora de custos</Text><Text style={styles.modalSubtitle}>Estimativa para próximas impressões</Text></View>
-              <Pressable onPress={() => setModalCalculadora(false)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setModalCalculadora(false)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable>
             </View>
             <View style={styles.calculationBox}>
               <Text style={styles.calculationLabel}>Valores de referência</Text>
@@ -1279,18 +1071,24 @@ export default function StockScreen() {
         </View>
       </Modal>
 
-      <Modal visible={modalDesperdicio} transparent animationType="slide" onRequestClose={() => setModalDesperdicio(false)}>
+      <Modal visible={modalDesperdicio} transparent animationType="slide" onRequestClose={() => fecharModal(setModalDesperdicio)}>
         <View style={styles.modalOverlay}><View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Registar desperdício</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
-          <Text style={styles.inputLabel}>Quantidade perdida</Text><TextInput style={styles.input} keyboardType="number-pad" value={quantidadeDesperdicio} onChangeText={setQuantidadeDesperdicio} placeholder="Ex.: 3" />
-          <Text style={styles.inputLabel}>Motivo</Text><TextInput style={styles.input} value={motivoDesperdicio} onChangeText={setMotivoDesperdicio} placeholder="Ex.: impressão saiu manchada" />
+          <View style={styles.modalHeader}>
+            <View><Text style={styles.modalTitle}>Registar desperdício</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome} · Stock atual: {itemSelecionado?.quantidade} {itemSelecionado?.unidade}</Text></View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => fecharModal(setModalDesperdicio)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable>
+          </View>
+          <Text style={styles.inputLabel}>Quantidade perdida</Text><TextInput style={styles.input} keyboardType="number-pad" value={quantidadeDesperdicio} onChangeText={setQuantidadeDesperdicio} placeholder="Quantidade" />
+          <Text style={styles.inputLabel}>Motivo</Text><TextInput style={styles.input} value={motivoDesperdicio} onChangeText={setMotivoDesperdicio} placeholder="Descreva o que aconteceu" />
           <ActionButton title="Confirmar desperdício" loading={processandoStock} onPress={pedirConfirmacaoDesperdicio} style={styles.confirmButton} />
         </View></View>
       </Modal>
 
-      <Modal visible={modalAjuste} transparent animationType="slide" onRequestClose={() => setModalAjuste(false)}>
+      <Modal visible={modalAjuste} transparent animationType="slide" onRequestClose={() => fecharModal(setModalAjuste)}>
         <View style={styles.modalOverlay}><View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Editar stock</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text>
+          <View style={styles.modalHeader}>
+            <View><Text style={styles.modalTitle}>Editar stock</Text><Text style={styles.modalSubtitle}>{itemSelecionado?.nome}</Text></View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => fecharModal(setModalAjuste)}><Ionicons name="close" size={28} color={colors.brand} /></Pressable>
+          </View>
           <Text style={styles.inputLabel}>Quantidade física atual ({itemSelecionado?.unidade})</Text><TextInput style={styles.input} keyboardType={itemSelecionado?.unidade.trim().toLocaleLowerCase() === 'folhas' ? 'number-pad' : 'decimal-pad'} value={quantidadeReal} onChangeText={setQuantidadeReal} placeholder="Informe a quantidade contada" />
           <Text style={styles.initialCostHint}>Este ajuste regista a diferença do inventário. Não será classificado automaticamente como desperdício.</Text>
           <ActionButton title="Guardar stock atualizado" loading={processandoStock} onPress={pedirConfirmacaoAjuste} style={styles.confirmButton} />
@@ -1486,17 +1284,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
 
-  currentStock: {
-    color: colors.muted,
-    marginBottom: 15,
-  },
-
-  modalLabel: {
-    color: colors.text,
-    fontWeight: fontWeights.semibold,
-    marginBottom: 7,
-  },
-
   input: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -1548,30 +1335,6 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: 'center',
     marginTop: 5,
-  },
-
-  entryButton: {
-    backgroundColor: colors.success,
-    padding: 15,
-    borderRadius: 11,
-    alignItems: 'center',
-    marginTop: 5,
-  },
-
-  exitButton: {
-    backgroundColor: colors.danger,
-    padding: 15,
-    borderRadius: 11,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-
-  lossButton: {
-    backgroundColor: colors.warning,
-    padding: 15,
-    borderRadius: 11,
-    alignItems: 'center',
-    marginTop: 10,
   },
 
   lossHistory: {
@@ -1646,7 +1409,7 @@ const styles = StyleSheet.create({
   moreButton: { width: 48, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 11, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(16,42,67,0.35)', justifyContent: 'flex-end' },
   configInkOverlay: { flexGrow: 1, justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: colors.surface, padding: 22, paddingBottom: 35, borderTopLeftRadius: 25, borderTopRightRadius: 25 },
+  modalContent: { backgroundColor: colors.surface, padding: 22, paddingBottom: 35, borderTopLeftRadius: 25, borderTopRightRadius: 25, width: '100%', maxWidth: 640, alignSelf: 'center' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 25 },
   modalSubtitle: { color: colors.muted, marginTop: spacing.xs },
   inputLabel: { color: colors.text, fontWeight: fontWeights.semibold, marginBottom: 7, marginTop: 10 },
