@@ -1,6 +1,7 @@
 import { expect, type BrowserContext, type Page, type Route, test } from '@playwright/test';
 import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { PDFDocument } from 'pdf-lib';
 
 // Testes da versão web da EJC Print. A API é sempre simulada (page.route):
 // nenhum pedido chega à Render nem à base de dados real.
@@ -16,8 +17,18 @@ const CORS = {
 const PASTA_FICHEIROS = path.join('tests', 'web', '.ficheiros');
 const DOCUMENTO = path.join(PASTA_FICHEIROS, 'documento-5mb.pdf');
 const COMPROVATIVO = path.join(PASTA_FICHEIROS, 'comprovativo.png');
+const PDF_6_PAGINAS = path.join(PASTA_FICHEIROS, 'relatorio-6-paginas.pdf');
+const DOCUMENTO_WORD = path.join(PASTA_FICHEIROS, 'carta.docx');
 
-test.beforeAll(() => {
+test.beforeAll(async () => {
+  if (!existsSync(PASTA_FICHEIROS)) mkdirSync(PASTA_FICHEIROS, { recursive: true });
+  if (!existsSync(PDF_6_PAGINAS)) {
+    const pdf = await PDFDocument.create();
+    for (let i = 0; i < 6; i += 1) pdf.addPage([595, 842]);
+    writeFileSync(PDF_6_PAGINAS, await pdf.save());
+  }
+  if (!existsSync(DOCUMENTO_WORD)) writeFileSync(DOCUMENTO_WORD, Buffer.from('PK\x03\x04 documento word de teste'));
+
   if (!existsSync(PASTA_FICHEIROS)) mkdirSync(PASTA_FICHEIROS, { recursive: true });
   if (!existsSync(DOCUMENTO)) {
     writeFileSync(DOCUMENTO, Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(5 * 1024 * 1024, 48), Buffer.from('\n%%EOF')]));
@@ -408,4 +419,120 @@ test('digitalização: pede o formato e a entrega e esconde cópias e encaderna�
   await expect(page.getByText('Levantar na papelaria')).toBeVisible();
   await expect(page.getByText('Encadernação (opcional)')).toHaveCount(0);
   await expect(page.getByText('Frente e verso')).toHaveCount(0);
+});
+
+test('PDF: as páginas são contadas sozinhas e o preço junta intervalo e páginas a cores', async ({ context, page }) => {
+  let corpoPedido: Record<string, unknown> | undefined;
+  await simularApi(context, (metodo, caminho, route) => {
+    if (metodo === 'POST' && caminho === '/api/orders') {
+      corpoPedido = route.request().postDataJSON() as Record<string, unknown>;
+      return { status: 201, corpo: { id: 'remoto-cores' } };
+    }
+    if (caminho.endsWith('/document')) return { status: 201, corpo: { id: 'doc-cores' } };
+    return undefined;
+  });
+  await page.goto('/');
+  await page.getByText('Continuar como cliente').first().click();
+  await page.getByText('Fazer pedido').click();
+  await page.getByText('Impressão P/B').first().click();
+  await page.getByText('Continuar', { exact: true }).first().click();
+  const [escolha] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Adicionar documento').click()]);
+  await escolha.setFiles(PDF_6_PAGINAS);
+  await expect(page.getByText('6 páginas (contadas automaticamente no PDF)')).toBeVisible();
+  await expect(page.getByPlaceholder('quantidade de páginas')).toHaveCount(0);
+
+  // Pré-visualização abre o PDF num separador novo.
+  const [previa] = await Promise.all([context.waitForEvent('page'), page.getByText('Pré-visualizar o documento').click()]);
+  await previa.waitForURL(/^blob:/);
+  await previa.close();
+
+  await page.getByText('Só algumas', { exact: true }).first().click();
+  await page.getByPlaceholder('início').fill('2');
+  await page.getByPlaceholder('fim').fill('5');
+  await page.getByText('Só algumas', { exact: true }).last().click();
+  await page.getByPlaceholder('ex.: 1, 5, 8-10').fill('1');
+  await expect(page.getByText('A página 1 está fora das páginas a imprimir (2 a 5).')).toBeVisible();
+  await page.getByPlaceholder('ex.: 1, 5, 8-10').fill('3');
+  await page.getByText('Continuar', { exact: true }).last().click();
+
+  // 3 páginas P/B × 3 MT + 1 página colorida simples × 5 MT = 14 MT
+  await expect(page.getByText('Imprimir: páginas 2 a 5 (4 páginas)')).toBeVisible();
+  await expect(page.getByText('A cores: 3 (Colorida simples)')).toBeVisible();
+  await expect(page.getByText('14.00 MT')).toBeVisible();
+  await page.getByPlaceholder('Nome Completo').fill('Cliente Cores');
+  await page.getByPlaceholder('WhatsApp / contacto').fill('840000000');
+  await page.getByText('Confirmar pedido').last().click();
+  await page.getByText('Agora não').click();
+
+  await expect.poll(() => corpoPedido?.pageCount).toBe(4);
+  expect(corpoPedido).toMatchObject({ unitPrice: 3, pageRange: '2-5', colorPages: '3', colorPageCount: 1, colorUnitPrice: 5 });
+
+  await entrarComoAdmin(page);
+  await page.getByText('Pedidos', { exact: true }).first().click();
+  await expect(page.getByText('A cores: 3 (1 × 5 MT) · restantes P/B')).toBeVisible();
+});
+
+test('Word: o cliente é avisado e o admin vê "confirmar páginas e formatação"', async ({ context, page }) => {
+  await simularApi(context, (metodo, caminho) => {
+    if (metodo === 'POST' && caminho === '/api/orders') return { status: 201, corpo: { id: 'remoto-word' } };
+    if (caminho.endsWith('/document')) return { status: 201, corpo: { id: 'doc-word' } };
+    return undefined;
+  });
+  await page.goto('/');
+  await page.getByText('Continuar como cliente').first().click();
+  await page.getByText('Fazer pedido').click();
+  await page.getByText('Impressão P/B').first().click();
+  await page.getByText('Continuar', { exact: true }).first().click();
+  const [escolha] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Adicionar documento').click()]);
+  await escolha.setFiles(DOCUMENTO_WORD);
+  await expect(page.getByText('Ficheiro Word:', { exact: false })).toBeVisible();
+  await page.getByPlaceholder('quantidade de páginas').fill('2');
+  await page.getByText('Continuar', { exact: true }).last().click();
+  await page.getByPlaceholder('Nome Completo').fill('Cliente Word');
+  await page.getByPlaceholder('WhatsApp / contacto').fill('840000000');
+  await page.getByText('Confirmar pedido').last().click();
+  await page.getByText('Agora não').click();
+
+  await entrarComoAdmin(page);
+  await page.getByText('Pedidos', { exact: true }).first().click();
+  await expect(page.getByText('Word: confirmar páginas e formatação')).toBeVisible();
+});
+
+test('pedido pronto: o admin avisa o cliente por WhatsApp com a mensagem já escrita', async ({ context, page }) => {
+  const pedidoPronto = {
+    id: 'remoto-pronto',
+    number: 'EJC-2026-PRONTO',
+    externalReference: 'pedido-pronto',
+    customerName: 'Maria Pronta',
+    customerPhone: '84 123 4567',
+    service: 'Impressão P/B',
+    instructions: null,
+    unitPriceCents: 300,
+    pageCount: 2,
+    copyCount: 1,
+    doubleSided: false,
+    sheetsRequired: 2,
+    bindingType: 'SEM_ENCADERNACAO',
+    bindingPriceCents: 0,
+    totalCents: 600,
+    status: 'READY_FOR_PICKUP',
+    createdAt: new Date().toISOString(),
+    documents: [],
+    payments: [{ id: 'pg-1', externalReference: 'pg-1', amountCents: 300, status: 'CONFIRMED' }],
+    stockMovements: [],
+  };
+  await simularApi(context, (metodo, caminho) => {
+    if (metodo === 'GET' && caminho === '/api/orders') return { corpo: [pedidoPronto] };
+    return undefined;
+  });
+  await context.route('https://wa.me/**', (route) => route.fulfill({ status: 200, body: 'ok' }));
+  await entrarComoAdmin(page);
+  await page.getByText('Pedidos', { exact: true }).first().click();
+  const [conversa] = await Promise.all([context.waitForEvent('page'), page.getByText('Avisar por WhatsApp').click()]);
+  await conversa.waitForURL(/wa\.me/);
+  const url = new URL(conversa.url());
+  expect(url.pathname).toBe('/258841234567');
+  const mensagem = url.searchParams.get('text') ?? '';
+  expect(mensagem).toContain('Olá Maria, o seu pedido EJC-2026-PRONTO (Impressão P/B) na EJC Print está pronto.');
+  expect(mensagem).toContain('Falta pagar 3.00 MT.');
 });

@@ -22,6 +22,12 @@ export type NovoPedido = {
   precoEncadernacao?: number;
   formatoEntrega?: FormatoEntrega;
   formaEntrega?: FormaEntrega;
+  /** Intervalo a imprimir, ex.: "3-10". numeroPaginas é o número de páginas desse intervalo. */
+  intervaloPaginas?: string;
+  /** Páginas a cores (ex.: "1, 5, 8-10"), quantas são e o preço de cada uma. */
+  paginasCores?: string;
+  numeroPaginasCores?: number;
+  precoCor?: number;
 };
 
 export type Pedido = {
@@ -60,6 +66,10 @@ export type Pedido = {
   sincronizacao_erro: string | null;
   formato_entrega: FormatoEntrega | null;
   forma_entrega: FormaEntrega | null;
+  intervalo_paginas: string | null;
+  paginas_cores: string | null;
+  numero_paginas_cores: number;
+  preco_cor: number;
 };
 
 export type ResumoPedido = {
@@ -122,9 +132,21 @@ export async function criarPedido(pedido: NovoPedido) {
     pedido.numeroCopias,
     pedido.frenteVerso
   );
+  const numeroPaginasCores = pedido.numeroPaginasCores ?? 0;
+  const precoCor = numeroPaginasCores > 0 ? Number(pedido.precoCor ?? 0) : 0;
+  if (
+    !Number.isSafeInteger(numeroPaginasCores) ||
+    numeroPaginasCores < 0 ||
+    numeroPaginasCores > pedido.numeroPaginas ||
+    (numeroPaginasCores > 0 && (!(precoCor > 0) || !pedido.paginasCores?.trim()))
+  ) {
+    throw new Error('As páginas a cores do pedido são inválidas.');
+  }
+  // Páginas P/B ao preço unitário e páginas a cores ao preço de cor, vezes as cópias.
   const totalServicoCentavos = Math.round(
-    (pedido.precoUnitario *
-      calculo.totalPaginasImpressas +
+    ((pedido.precoUnitario * (pedido.numeroPaginas - numeroPaginasCores) +
+      precoCor * numeroPaginasCores) *
+      pedido.numeroCopias +
       Number.EPSILON) *
       100
   );
@@ -179,9 +201,13 @@ export async function criarPedido(pedido: NovoPedido) {
         tipo_encadernacao,
         preco_encadernacao,
         formato_entrega,
-        forma_entrega
+        forma_entrega,
+        intervalo_paginas,
+        paginas_cores,
+        numero_paginas_cores,
+        preco_cor
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     null,
     pedido.cliente,
@@ -202,7 +228,11 @@ export async function criarPedido(pedido: NovoPedido) {
     pedido.tipoEncadernacao ?? 'SEM_ENCADERNACAO',
     precoEncadernacao,
     servicoDigital ? pedido.formatoEntrega ?? null : null,
-    servicoDigital ? pedido.formaEntrega ?? null : null
+    servicoDigital ? pedido.formaEntrega ?? null : null,
+    pedido.intervaloPaginas ?? null,
+    numeroPaginasCores > 0 ? pedido.paginasCores!.trim() : null,
+    numeroPaginasCores,
+    precoCor
   );
 
   const id = resultado.lastInsertRowId;

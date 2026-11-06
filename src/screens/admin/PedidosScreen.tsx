@@ -12,6 +12,7 @@ import {
   RefreshControl,
   Modal,
   ScrollView,
+  Linking,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
@@ -33,7 +34,8 @@ import {
 import { sincronizarTudoPendentes } from "../../services/sincronizacaoSeguraService";
 import { obterNomeEstado, obterProximaAcao } from "../../utils/estadoPedido";
 import { aguardaOriginal } from "../../utils/servicoPresencial";
-import { descreverEntrega } from "../../utils/servicos";
+import { descreverEntrega, ehServicoDigital } from "../../utils/servicos";
+import { ehWord, numeroWhatsApp } from "../../utils/paginas";
 import { Ionicons } from "@expo/vector-icons";
 import { abrirArquivoPedido } from "../../services/arquivoRemotoService";
 import { obterTokenAdministrador } from "../../services/adminAuthService";
@@ -663,6 +665,34 @@ export default function PedidosScreen() {
     );
   }
 
+  async function avisarPorWhatsApp(item: Pedido) {
+    const numero = numeroWhatsApp(item.contacto);
+    if (!numero) {
+      showAppAlert("Contacto inválido", `Não foi possível usar "${item.contacto}" como número de WhatsApp.`);
+      return;
+    }
+    const falta = Math.max(item.total - (item.valor_pago ?? 0), 0);
+    const primeiroNome = item.cliente.trim().split(/\s+/)[0] ?? "";
+    const linhas = [
+      `Olá ${primeiroNome}, o seu pedido ${item.numero} (${item.servico}) na EJC Print está pronto.`,
+      ehServicoDigital(item.servico) && item.forma_entrega === "WHATSAPP"
+        ? "Enviamos o ficheiro nesta conversa."
+        : "Já pode levantar na papelaria.",
+      falta > 0.001 ? `Falta pagar ${falta.toFixed(2)} MT.` : "O pedido está pago.",
+      "Obrigado!",
+    ];
+    const url = `https://wa.me/${numero}?text=${encodeURIComponent(linhas.join("\n"))}`;
+    try {
+      if (Platform.OS === "web") {
+        window.open(url, "_blank", "noopener");
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch {
+      showAppAlert("WhatsApp", "Não foi possível abrir o WhatsApp neste dispositivo.");
+    }
+  }
+
   function renderPedidoSimples({ item }: { item: Pedido }) {
     const aberto = pedidoAberto === item.id;
     const totalPaginas = item.numero_paginas * item.numero_copias;
@@ -682,6 +712,12 @@ export default function PedidosScreen() {
               <View style={styles.aguardaOriginal}>
                 <Ionicons name="document-text-outline" size={14} color={colors.warning} />
                 <Text style={styles.aguardaOriginalTexto}>Aguarda o original</Text>
+              </View>
+            )}
+            {ehWord(item.documento_nome) && item.estado !== "Entregue" && item.estado !== "Cancelado" && (
+              <View style={styles.aguardaOriginal}>
+                <Ionicons name="alert-circle-outline" size={14} color={colors.warning} />
+                <Text style={styles.aguardaOriginalTexto}>Word: confirmar páginas e formatação</Text>
               </View>
             )}
           </View>
@@ -743,7 +779,13 @@ export default function PedidosScreen() {
             <Text style={styles.serviceDetails}>
               {totalPaginas} página{totalPaginas !== 1 ? "s" : ""} •{" "}
               {item.numero_copias} cópia{item.numero_copias !== 1 ? "s" : ""}
+              {item.intervalo_paginas ? ` • pág. ${item.intervalo_paginas.replace("-", " a ")}` : ""}
             </Text>
+            {(item.numero_paginas_cores ?? 0) > 0 && (
+              <Text style={styles.coresTexto}>
+                A cores: {item.paginas_cores} ({item.numero_paginas_cores} × {item.preco_cor} MT) · restantes P/B
+              </Text>
+            )}
           </View>
         </View>
         <View style={styles.priceRow}>
@@ -763,6 +805,16 @@ export default function PedidosScreen() {
             </View>
           )}
         </View>
+        {item.estado === "Pronto para levantamento" && item.cliente !== "Cliente removido" && (
+          <Pressable
+            accessibilityRole="button"
+            style={styles.whatsappButton}
+            onPress={() => void avisarPorWhatsApp(item)}
+          >
+            <Ionicons name="logo-whatsapp" size={19} color="#FFF" />
+            <Text style={styles.whatsappText}>Avisar por WhatsApp</Text>
+          </Pressable>
+        )}
         <Pressable
           style={styles.detailsButton}
           onPress={() => setPedidoAberto(aberto ? null : item.id)}
@@ -1319,6 +1371,18 @@ const styles = StyleSheet.create({
   },
   orderNumber: { color: colors.brand, fontSize: 18, fontWeight: fontWeights.bold },
   clientName: { color: colors.muted, marginTop: 3 },
+  coresTexto: { color: colors.brand, fontSize: 13, marginTop: 3, fontWeight: fontWeights.bold },
+  whatsappButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: spacing.sm,
+    paddingVertical: 11,
+    borderRadius: radii.md,
+    backgroundColor: "#1F8F4E",
+  },
+  whatsappText: { color: "#FFF", fontWeight: fontWeights.bold },
   entrega: {
     flexDirection: "row",
     alignItems: "center",

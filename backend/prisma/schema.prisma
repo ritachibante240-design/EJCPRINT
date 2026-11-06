@@ -55,6 +55,10 @@ model Order {
   instructions      String?
   deliveryFormat    String?
   deliveryMethod    String?
+  pageRange         String?
+  colorPages        String?
+  colorPageCount    Int             @default(0)
+  colorUnitPriceCents Int           @default(0)
   unitPriceCents    Int
   pageCount         Int
   copyCount         Int

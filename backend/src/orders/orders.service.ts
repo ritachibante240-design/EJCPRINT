@@ -102,7 +102,25 @@ export class OrdersService {
       : printedPages;
     const unitPriceCents = Math.round(input.unitPrice * 100);
     const bindingPriceCents = Math.round((input.bindingPrice ?? 0) * 100);
-    const totalCents = unitPriceCents * printedPages + bindingPriceCents;
+    const colorPageCount = input.colorPageCount ?? 0;
+    const colorUnitPriceCents = colorPageCount > 0 ? Math.round((input.colorUnitPrice ?? 0) * 100) : 0;
+    if (colorPageCount > input.pageCount) {
+      throw new BadRequestException('O número de páginas a cores não pode ser maior que o número de páginas.');
+    }
+    if (colorPageCount > 0 && (colorUnitPriceCents <= 0 || !input.colorPages?.trim())) {
+      throw new BadRequestException('Indique as páginas a cores e o respetivo preço.');
+    }
+    if (input.pageRange) {
+      const [inicio, fim] = input.pageRange.split('-').map(Number);
+      if (inicio < 1 || fim < inicio || fim - inicio + 1 !== input.pageCount) {
+        throw new BadRequestException('O intervalo de páginas não corresponde ao número de páginas.');
+      }
+    }
+    // Páginas P/B ao preço unitário e páginas a cores ao preço de cor, vezes as cópias.
+    const totalCents =
+      (unitPriceCents * (input.pageCount - colorPageCount) + colorUnitPriceCents * colorPageCount) *
+        input.copyCount +
+      bindingPriceCents;
 
     const order = await this.prisma.order.create({
       data: {
@@ -114,6 +132,10 @@ export class OrdersService {
         instructions: input.instructions?.trim() || null,
         deliveryFormat: input.deliveryFormat ?? null,
         deliveryMethod: input.deliveryMethod ?? null,
+        pageRange: input.pageRange ?? null,
+        colorPages: colorPageCount > 0 ? input.colorPages!.trim() : null,
+        colorPageCount,
+        colorUnitPriceCents,
         unitPriceCents,
         pageCount: input.pageCount,
         copyCount: input.copyCount,

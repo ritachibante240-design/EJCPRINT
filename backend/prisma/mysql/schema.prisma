@@ -34,6 +34,10 @@ model Order {
   instructions      String?         @db.Text
   deliveryFormat    String?         @db.VarChar(20)
   deliveryMethod    String?         @db.VarChar(20)
+  pageRange         String?         @db.VarChar(30)
+  colorPages        String?         @db.VarChar(200)
+  colorPageCount    Int             @default(0)
+  colorUnitPriceCents Int           @default(0)
   unitPriceCents    Int
   pageCount         Int
   copyCount         Int

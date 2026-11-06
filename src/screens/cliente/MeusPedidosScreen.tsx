@@ -464,6 +464,16 @@ export default function MeusPedidosScreen() {
                 </View>
               </View>
               {aguardaOriginal(item) && <AvisoOriginal />}
+              {(item.intervalo_paginas || (item.numero_paginas_cores ?? 0) > 0) && (
+                <Text style={styles.entregaTexto}>
+                  {[
+                    item.intervalo_paginas ? `Páginas ${item.intervalo_paginas.replace('-', ' a ')}` : null,
+                    (item.numero_paginas_cores ?? 0) > 0 ? `A cores: ${item.paginas_cores}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              )}
               {descreverEntrega(item.formato_entrega, item.forma_entrega) && (
                 <Text style={styles.entregaTexto}>
                   {descreverEntrega(item.formato_entrega, item.forma_entrega)}

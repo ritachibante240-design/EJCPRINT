@@ -18,6 +18,10 @@ type PedidoRemoto = {
   instructions?: string | null;
   deliveryFormat?: string | null;
   deliveryMethod?: string | null;
+  pageRange?: string | null;
+  colorPages?: string | null;
+  colorPageCount?: number;
+  colorUnitPriceCents?: number;
   unitPriceCents: number;
   pageCount: number;
   copyCount: number;
@@ -182,6 +186,14 @@ async function sincronizarPedidoLocalSemConcorrencia(pedido: Pedido) {
           bindingPrice: pedido.preco_encadernacao,
           ...(pedido.formato_entrega ? { deliveryFormat: pedido.formato_entrega } : {}),
           ...(pedido.forma_entrega ? { deliveryMethod: pedido.forma_entrega } : {}),
+          ...(pedido.intervalo_paginas ? { pageRange: pedido.intervalo_paginas } : {}),
+          ...((pedido.numero_paginas_cores ?? 0) > 0
+            ? {
+                colorPages: pedido.paginas_cores ?? undefined,
+                colorPageCount: pedido.numero_paginas_cores,
+                colorUnitPrice: pedido.preco_cor,
+              }
+            : {}),
         }),
       });
 
@@ -339,7 +351,9 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
         numero_copias = ?, frente_verso = ?, folhas_necessarias = ?, valor_pago = ?,
         tipo_encadernacao = ?, preco_encadernacao = ?, sync_chave = ?, remoto_id = ?,
         sincronizacao_estado = ?, encadernacao_consumida = ?, espiral_encadernacao = ?, custo_encadernacao = ?,
-        formato_entrega = COALESCE(?, formato_entrega), forma_entrega = COALESCE(?, forma_entrega)
+        formato_entrega = COALESCE(?, formato_entrega), forma_entrega = COALESCE(?, forma_entrega),
+        intervalo_paginas = COALESCE(?, intervalo_paginas), paginas_cores = COALESCE(?, paginas_cores),
+        numero_paginas_cores = COALESCE(?, numero_paginas_cores), preco_cor = COALESCE(?, preco_cor)
        WHERE id = ?`,
       ...valores,
       existente.sincronizacao_estado === 'PENDENTE' && existente.documento_uri && !existente.documento_remoto_id
@@ -350,6 +364,10 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
       custoEncadernacao,
       pedido.deliveryFormat ?? null,
       pedido.deliveryMethod ?? null,
+      pedido.pageRange ?? null,
+      pedido.colorPages ?? null,
+      pedido.colorPageCount ?? null,
+      pedido.colorUnitPriceCents !== undefined ? pedido.colorUnitPriceCents / 100 : null,
       existente.id
     );
     return;
@@ -362,14 +380,18 @@ async function guardarPedidoRemoto(pedido: PedidoRemoto) {
       numero_copias, frente_verso, folhas_necessarias,
       valor_pago, tipo_encadernacao, preco_encadernacao, sync_chave, remoto_id,
       sincronizacao_estado, encadernacao_consumida, espiral_encadernacao, custo_encadernacao,
-      formato_entrega, forma_entrega
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO', ?, ?, ?, ?, ?)`,
+      formato_entrega, forma_entrega, intervalo_paginas, paginas_cores, numero_paginas_cores, preco_cor
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SINCRONIZADO', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...valores,
     encadernacaoConsumida,
     espiralEncadernacao,
     custoEncadernacao,
     pedido.deliveryFormat ?? null,
-    pedido.deliveryMethod ?? null
+    pedido.deliveryMethod ?? null,
+    pedido.pageRange ?? null,
+    pedido.colorPages ?? null,
+    pedido.colorPageCount ?? 0,
+    (pedido.colorUnitPriceCents ?? 0) / 100
   );
 }
 

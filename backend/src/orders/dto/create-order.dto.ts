@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 // Serviços digitais (Digitalização e Digitação): em que formato e como o cliente recebe o ficheiro.
 export const FORMATOS_ENTREGA = ['PDF', 'IMAGEM', 'WORD'] as const;
@@ -49,6 +49,30 @@ export class CreateOrderDto {
   @IsOptional()
   @IsIn(FORMAS_ENTREGA)
   deliveryMethod?: (typeof FORMAS_ENTREGA)[number];
+
+  // Intervalo a imprimir, ex.: "3-10". pageCount já é o número de páginas desse intervalo.
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,5}-\d{1,5}$/)
+  pageRange?: string;
+
+  // Páginas a cores (ex.: "1, 5, 8-10"); as restantes pagam unitPrice.
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  colorPages?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(0)
+  colorPageCount?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  colorUnitPrice?: number;
 
   @IsOptional()
   @IsString()

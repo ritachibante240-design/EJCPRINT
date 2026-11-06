@@ -31,6 +31,14 @@ import {
   View,
 } from "react-native";
 import PagamentoModal from "../../components/PagamentoModal";
+import * as Sharing from "expo-sharing";
+import {
+  contarPaginasPdf,
+  ehPdf,
+  ehWord,
+  formatarListaPaginas,
+  interpretarListaPaginas,
+} from "../../utils/paginas";
 import { TipoPagamento } from "../../services/pagamentoService";
 
 type Servico = { id: number; nome: string; preco: number };
@@ -113,6 +121,17 @@ export default function NovoPedidoScreen({ navigation }: any) {
   // Serviços digitais: formato do ficheiro e como o cliente o recebe.
   const [formatoEntrega, setFormatoEntrega] = useState<FormatoEntrega | null>(null);
   const [formaEntrega, setFormaEntrega] = useState<FormaEntrega | null>(null);
+  // Páginas contadas automaticamente no PDF (null = o cliente escreve o número).
+  const [paginasContadas, setPaginasContadas] = useState<number | null>(null);
+  const [contandoPaginas, setContandoPaginas] = useState(false);
+  // Imprimir todas as páginas ou só um intervalo (ex.: 3 a 10).
+  const [imprimirTudo, setImprimirTudo] = useState(true);
+  const [intervaloInicio, setIntervaloInicio] = useState("");
+  const [intervaloFim, setIntervaloFim] = useState("");
+  // Páginas a cores: "TUDO" = todo o documento no tipo escolhido; "ALGUMAS" = só as indicadas.
+  const [modoCor, setModoCor] = useState<"TUDO" | "ALGUMAS">("TUDO");
+  const [paginasCoresTexto, setPaginasCoresTexto] = useState("");
+  const [tipoCor, setTipoCor] = useState<"Colorida simples" | "Colorida com imagens">("Colorida simples");
   const [pagamentoAberto, setPagamentoAberto] = useState(false);
   const [pedidoParaPagamento, setPedidoParaPagamento] = useState<{
     id: number;
@@ -134,8 +153,19 @@ export default function NovoPedidoScreen({ navigation }: any) {
   const servicoImpressaoPB = servicos.find((item) => item.nome === "Impressão P/B");
   const precoImpressaoPB = servicoImpressaoPB?.preco ?? 3;
 
+  function limparOpcoesDePaginas() {
+    setImprimirTudo(true);
+    setIntervaloInicio("");
+    setIntervaloFim("");
+    setModoCor("TUDO");
+    setPaginasCoresTexto("");
+    setTipoCor("Colorida simples");
+  }
+
   function escolherServico(novo: Servico) {
     setServicoSelecionado(novo);
+    setModoCor("TUDO");
+    setPaginasCoresTexto("");
     setFormatoEntrega(null);
     setFormaEntrega(null);
     if (ehServicoDigital(novo.nome)) {
@@ -154,8 +184,40 @@ export default function NovoPedidoScreen({ navigation }: any) {
       `Anexe o documento em PDF (pode ser uma digitalização ou uma foto convertida em PDF). O preço passa a ${servicoImpressaoPB.preco} MT por página e não precisa de levar o original à papelaria.`,
     );
   }
+  const ehServicoColorido = servico === "Colorida simples" || servico === "Colorida com imagens";
+  const totalPaginasDocumento = Number(numeroPaginas);
+  const documentoValido = Number.isInteger(totalPaginasDocumento) && totalPaginasDocumento > 0;
+  const usaIntervalo = ehImpressao && !imprimirTudo;
+  const primeiraPagina = usaIntervalo ? Number(intervaloInicio) : 1;
+  const ultimaPagina = usaIntervalo ? Number(intervaloFim) : totalPaginasDocumento;
+  const erroIntervalo = !usaIntervalo || !documentoValido
+    ? null
+    : !Number.isInteger(primeiraPagina) || !Number.isInteger(ultimaPagina) || primeiraPagina < 1 || ultimaPagina < 1
+      ? "Indique a primeira e a última página a imprimir."
+      : ultimaPagina < primeiraPagina
+        ? "A última página tem de ser igual ou maior que a primeira."
+        : ultimaPagina > totalPaginasDocumento
+          ? `O documento só tem ${totalPaginasDocumento} páginas.`
+          : null;
+  const paginasAImprimir = !documentoValido
+    ? 0
+    : usaIntervalo
+      ? erroIntervalo ? 0 : ultimaPagina - primeiraPagina + 1
+      : totalPaginasDocumento;
+  const algumasACores = ehImpressao && modoCor === "ALGUMAS";
+  const resultadoCores = algumasACores && paginasAImprimir > 0
+    ? interpretarListaPaginas(paginasCoresTexto, primeiraPagina, ultimaPagina)
+    : null;
+  const paginasCores = resultadoCores?.paginas ?? [];
+  const numeroPaginasCores = paginasCores.length;
+  const precoDoServico = (nome: string) => servicos.find((item) => item.nome === nome)?.preco ?? 0;
+  // A regra de preço: páginas a cores ao preço colorido; as restantes ao preço de Impressão P/B.
+  const precoBase = algumasACores && ehServicoColorido ? precoImpressaoPB : servicoSelecionado?.preco ?? 0;
+  const precoCor = algumasACores ? (ehServicoColorido ? servicoSelecionado?.preco ?? 0 : precoDoServico(tipoCor)) : 0;
+  const nomeTipoCor = ehServicoColorido ? servico : tipoCor;
+
   const calculo = useMemo(() => {
-    const p = Number(numeroPaginas);
+    const p = paginasAImprimir;
     const c = Number(numeroCopias);
     if (!Number.isInteger(p) || p <= 0 || !Number.isInteger(c) || c <= 0)
       return null;
@@ -164,7 +226,7 @@ export default function NovoPedidoScreen({ navigation }: any) {
     } catch {
       return null;
     }
-  }, [numeroPaginas, numeroCopias, frenteVerso, servicoDigital]);
+  }, [paginasAImprimir, numeroCopias, frenteVerso, servicoDigital]);
   const precoEncadernacaoPorCopia =
     tipoEncadernacao !== "SEM_ENCADERNACAO" && calculo
       ? calcularPrecoEncadernacao(calculo.folhasPorCopia)
@@ -179,7 +241,9 @@ export default function NovoPedidoScreen({ navigation }: any) {
   const total =
     servicoSelecionado && calculo
       ? Math.round(
-          (servicoSelecionado.preco * calculo.totalPaginasImpressas +
+          ((precoBase * (calculo.paginasPorCopia - numeroPaginasCores) +
+            precoCor * numeroPaginasCores) *
+            calculo.numeroCopias +
             precoEncadernacao) *
             100,
         ) / 100
@@ -208,6 +272,25 @@ export default function NovoPedidoScreen({ navigation }: any) {
         }
         const documentoUri = await guardarDocumentoDoPedido(arquivo);
         setDocumento({ ...arquivo, uri: documentoUri });
+        limparOpcoesDePaginas();
+        setPaginasContadas(null);
+        setNumeroPaginas("");
+        if (ehPdf(arquivo.name, arquivo.mimeType)) {
+          // Conta as páginas do PDF para o preço ficar certo (o cliente não precisa de as contar).
+          setContandoPaginas(true);
+          try {
+            const total = await contarPaginasPdf({
+              uri: documentoUri,
+              file: arquivo.file,
+            });
+            if (total) {
+              setPaginasContadas(total);
+              setNumeroPaginas(String(total));
+            }
+          } finally {
+            setContandoPaginas(false);
+          }
+        }
       }
     } catch (erro) {
       showAppAlert(
@@ -216,6 +299,35 @@ export default function NovoPedidoScreen({ navigation }: any) {
           ? erro.message
           : "Não foi possível selecionar e guardar o documento.",
       );
+    }
+  }
+  async function preVisualizarDocumento() {
+    if (!documento) return;
+    try {
+      if (Platform.OS === "web") {
+        if (!ehPdf(documento.name, documento.mimeType) || !documento.file) {
+          showAppAlert(
+            "Pré-visualização indisponível",
+            `O navegador não abre ficheiros Word. Confirme que o ficheiro é "${documento.name}". Para ter a certeza de que a formatação não muda, envie o documento em PDF.`,
+          );
+          return;
+        }
+        const url = URL.createObjectURL(documento.file);
+        window.open(url, "_blank", "noopener");
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        return;
+      }
+      if (!(await Sharing.isAvailableAsync())) {
+        showAppAlert("Pré-visualização indisponível", "Este dispositivo não consegue abrir o documento.");
+        return;
+      }
+      await Sharing.shareAsync(documento.uri, {
+        mimeType: documento.mimeType ?? undefined,
+        dialogTitle: "Abrir o documento",
+        UTI: ehPdf(documento.name, documento.mimeType) ? "com.adobe.pdf" : undefined,
+      });
+    } catch {
+      showAppAlert("Erro", "Não foi possível abrir o documento.");
     }
   }
   async function guardarDocumentoDoPedido(
@@ -244,11 +356,16 @@ export default function NovoPedidoScreen({ navigation }: any) {
     return destino.uri;
   }
   function irParaConfirmacao() {
-    if (!Number.isInteger(Number(numeroPaginas)) || Number(numeroPaginas) <= 0)
+    if (contandoPaginas)
+      return showAppAlert("Um momento", "Ainda estamos a contar as páginas do documento.");
+    if (!documentoValido)
       return showAppAlert(
         "Verifique as páginas",
         "Informe quantas páginas tem o documento.",
       );
+    if (erroIntervalo) return showAppAlert("Verifique as páginas a imprimir", erroIntervalo);
+    if (algumasACores && resultadoCores?.erro)
+      return showAppAlert("Verifique as páginas a cores", resultadoCores.erro);
     if (!Number.isInteger(Number(numeroCopias)) || Number(numeroCopias) <= 0)
       return showAppAlert(
         "Verifique as cópias",
@@ -297,10 +414,14 @@ export default function NovoPedidoScreen({ navigation }: any) {
         contacto: contacto.trim(),
         servico: servicoSelecionado.nome,
         instrucoes: ehDigitacao ? instrucoesDigitalizacao.trim() : undefined,
-        precoUnitario: servicoSelecionado.preco,
+        precoUnitario: precoBase,
         quantidade: Number(numeroCopias),
         total,
-        numeroPaginas: Number(numeroPaginas),
+        numeroPaginas: calculo.paginasPorCopia,
+        intervaloPaginas: usaIntervalo ? `${primeiraPagina}-${ultimaPagina}` : undefined,
+        paginasCores: numeroPaginasCores > 0 ? formatarListaPaginas(paginasCores) : undefined,
+        numeroPaginasCores,
+        precoCor,
         numeroCopias: Number(numeroCopias),
         frenteVerso: servicoDigital ? false : frenteVerso,
         folhasNecessarias: servicoDigital ? 0 : calculo.totalFolhas,
@@ -326,6 +447,8 @@ export default function NovoPedidoScreen({ navigation }: any) {
       setNumeroCopias("1");
       setFrenteVerso(false);
       setDocumento(null);
+      setPaginasContadas(null);
+      limparOpcoesDePaginas();
       showAppAlert("Pedido criado", "Escolha como deseja pagar.", [
         {
           text: "Pagar 50%",
@@ -504,6 +627,25 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 <Ionicons name="chevron-forward" size={21} color={colors.subtle} />
               </Pressable>
             )}
+            {ehImpressao && documento && (
+              <Pressable
+                accessibilityRole="button"
+                style={styles.previewButton}
+                onPress={() => void preVisualizarDocumento()}
+              >
+                <Ionicons name="eye-outline" size={19} color={colors.brand} />
+                <Text style={styles.previewText}>Pré-visualizar o documento</Text>
+              </Pressable>
+            )}
+            {ehImpressao && documento && ehWord(documento.name, documento.mimeType) && (
+              <View style={styles.avisoWord}>
+                <Ionicons name="alert-circle-outline" size={21} color={colors.warning} />
+                <Text style={styles.avisoWordTexto}>
+                  Ficheiro Word: a formatação pode mudar quando for aberto noutro computador, e a
+                  papelaria vai confirmar o número de páginas. Para ter a certeza, envie em PDF.
+                </Text>
+              </View>
+            )}
             <Text style={styles.label}>
               {ehDigitalizacao
                 ? "Quantas páginas vai digitalizar?"
@@ -516,13 +658,122 @@ export default function NovoPedidoScreen({ navigation }: any) {
                 ? `${servicoSelecionado?.preco} MT por página.`
                 : `${servicoSelecionado?.preco} MT por página. O total do serviço considera páginas × cópias; frente e verso reduz as folhas, não as páginas cobradas.`}
             </Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="number-pad"
-              value={numeroPaginas}
-              onChangeText={setNumeroPaginas}
-              placeholder="quantidade de páginas"
-            />
+            {contandoPaginas ? (
+              <View style={styles.contagem}>
+                <Text style={styles.contagemTexto}>A contar as páginas do PDF...</Text>
+              </View>
+            ) : paginasContadas !== null ? (
+              <View style={styles.contagem}>
+                <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                <Text style={styles.contagemTexto}>
+                  {paginasContadas} página{paginasContadas !== 1 ? "s" : ""} (contadas automaticamente no PDF)
+                </Text>
+              </View>
+            ) : (
+              <TextInput
+                style={styles.input}
+                keyboardType="number-pad"
+                value={numeroPaginas}
+                onChangeText={(texto) => {
+                  setNumeroPaginas(texto);
+                  setImprimirTudo(true);
+                }}
+                placeholder="quantidade de páginas"
+              />
+            )}
+            {ehImpressao && documentoValido && !contandoPaginas && (
+              <>
+                <Text style={styles.label}>Que páginas quer imprimir?</Text>
+                <View style={styles.typeRow}>
+                  <Pressable
+                    style={[styles.typeButton, imprimirTudo && styles.typeSelected]}
+                    onPress={() => setImprimirTudo(true)}
+                  >
+                    <Text>Todas</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.typeButton, !imprimirTudo && styles.typeSelected]}
+                    onPress={() => setImprimirTudo(false)}
+                  >
+                    <Text>Só algumas</Text>
+                  </Pressable>
+                </View>
+                {!imprimirTudo && (
+                  <View style={styles.intervaloRow}>
+                    <Text>Da página</Text>
+                    <TextInput
+                      style={[styles.input, styles.intervaloInput]}
+                      keyboardType="number-pad"
+                      value={intervaloInicio}
+                      onChangeText={setIntervaloInicio}
+                      placeholder="início"
+                    />
+                    <Text>à</Text>
+                    <TextInput
+                      style={[styles.input, styles.intervaloInput]}
+                      keyboardType="number-pad"
+                      value={intervaloFim}
+                      onChangeText={setIntervaloFim}
+                      placeholder="fim"
+                    />
+                  </View>
+                )}
+                {erroIntervalo && (intervaloInicio !== "" && intervaloFim !== "") && (
+                  <Text style={styles.erroTexto}>{erroIntervalo}</Text>
+                )}
+                <Text style={styles.label}>Páginas a cores</Text>
+                <View style={styles.typeRow}>
+                  <Pressable
+                    style={[styles.typeButton, modoCor === "TUDO" && styles.typeSelected]}
+                    onPress={() => setModoCor("TUDO")}
+                  >
+                    <Text>{ehServicoColorido ? "Todas a cores" : "Nenhuma (tudo P/B)"}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.typeButton, modoCor === "ALGUMAS" && styles.typeSelected]}
+                    onPress={() => setModoCor("ALGUMAS")}
+                  >
+                    <Text>Só algumas</Text>
+                  </Pressable>
+                </View>
+                {algumasACores && (
+                  <>
+                    <Text style={styles.helperText}>
+                      As páginas indicadas pagam o preço a cores e as restantes {precoImpressaoPB} MT (P/B).
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      value={paginasCoresTexto}
+                      onChangeText={setPaginasCoresTexto}
+                      placeholder="ex.: 1, 5, 8-10"
+                    />
+                    {!ehServicoColorido && (
+                      <View style={styles.typeRow}>
+                        {(["Colorida simples", "Colorida com imagens"] as const).map((tipo) => (
+                          <Pressable
+                            key={tipo}
+                            style={[styles.typeButton, tipoCor === tipo && styles.typeSelected]}
+                            onPress={() => setTipoCor(tipo)}
+                          >
+                            <Text>{tipo} ({precoDoServico(tipo)} MT)</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    {paginasCoresTexto.trim() !== "" && resultadoCores?.erro && (
+                      <Text style={styles.erroTexto}>{resultadoCores.erro}</Text>
+                    )}
+                    {numeroPaginasCores > 0 && (
+                      <Text style={styles.helperText}>
+                        {numeroPaginasCores} página{numeroPaginasCores !== 1 ? "s" : ""} a cores × {precoCor} MT
+                        {" + "}
+                        {paginasAImprimir - numeroPaginasCores} P/B × {precoBase} MT, por cópia.
+                      </Text>
+                    )}
+                  </>
+                )}
+              </>
+            )}
             {!servicoDigital && (<>
             <Text style={styles.label}>Quantas cópias?</Text>
             <View style={styles.counter}>
@@ -680,6 +931,16 @@ export default function NovoPedidoScreen({ navigation }: any) {
               <Text style={styles.summaryLine}>
                 Documento: {numeroPaginas} páginas
               </Text>
+              {usaIntervalo && (
+                <Text style={styles.summaryLine}>
+                  Imprimir: páginas {primeiraPagina} a {ultimaPagina} ({paginasAImprimir} páginas)
+                </Text>
+              )}
+              {numeroPaginasCores > 0 && (
+                <Text style={styles.summaryLine}>
+                  A cores: {formatarListaPaginas(paginasCores)} ({nomeTipoCor})
+                </Text>
+              )}
               {ehDigitacao && instrucoesDigitalizacao.trim().length > 0 && (
                 <>
                   <Text style={styles.summaryLine}>Tema e instruções:</Text>
@@ -706,7 +967,9 @@ export default function NovoPedidoScreen({ navigation }: any) {
               )}
               {calculo && servicoSelecionado && (
                 <Text style={styles.summaryLine}>
-                  Serviço: {servicoSelecionado.preco} MT × {calculo.totalPaginasImpressas} páginas
+                  {numeroPaginasCores > 0
+                    ? `Serviço: (${calculo.paginasPorCopia - numeroPaginasCores} × ${precoBase} MT + ${numeroPaginasCores} × ${precoCor} MT) × ${calculo.numeroCopias} cópia${calculo.numeroCopias !== 1 ? "s" : ""}`
+                    : `Serviço: ${precoBase} MT × ${calculo.totalPaginasImpressas} páginas`}
                 </Text>
               )}
               {tipoEncadernacao !== "SEM_ENCADERNACAO" && calculo && (
@@ -959,6 +1222,42 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.bold,
     marginBottom: spacing.md,
   },
+  previewButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: -4,
+    marginBottom: 12,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  previewText: { color: colors.brand, fontWeight: fontWeights.bold },
+  avisoWord: {
+    flexDirection: "row",
+    gap: 10,
+    padding: spacing.md,
+    marginBottom: 12,
+    borderRadius: radii.md,
+    backgroundColor: colors.warningSoft,
+  },
+  avisoWordTexto: { flex: 1, color: colors.warning, lineHeight: 20 },
+  contagem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: spacing.md,
+    marginBottom: 12,
+    borderRadius: radii.md,
+    backgroundColor: colors.brandSoft,
+  },
+  contagemTexto: { flex: 1, color: colors.text, fontWeight: fontWeights.bold },
+  intervaloRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+  intervaloInput: { flex: 1, marginBottom: 0 },
+  erroTexto: { color: colors.danger, marginTop: 6, marginBottom: 6 },
   infoBox: {
     flexDirection: "row",
     alignItems: "center",
