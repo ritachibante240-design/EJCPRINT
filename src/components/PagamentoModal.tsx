@@ -4,7 +4,7 @@ import { showAppAlert } from './AppAlert';
 import React, { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { enviarPagamento, MetodoPagamento, TipoPagamento } from '../services/pagamentoService';
@@ -65,7 +65,7 @@ export default function PagamentoModal({ visible, pedidoId, numeroPedido, client
     const permissao = camera ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissao.granted) return showAppAlert('Permissão necessária', 'Permita o acesso às imagens.');
     const resultado = camera ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 }) : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (!resultado.canceled) { const imagem = resultado.assets[0]; setUri(imagem.uri); setNome(imagem.fileName ?? `comprovativo-${Date.now()}.jpg`); setEhPdf(false); }
+    if (!resultado.canceled) { const imagem = resultado.assets[0]; const tamanhoImagem = imagem.fileSize ?? imagem.file?.size ?? 0; if (tamanhoImagem > 5 * 1024 * 1024) return showAppAlert('Imagem demasiado grande', 'O comprovativo deve ter no máximo 5 MB.'); setUri(imagem.uri); setNome(imagem.fileName ?? `comprovativo-${Date.now()}.jpg`); setEhPdf(false); }
   }
   async function escolherPdf() {
     try {
@@ -199,11 +199,13 @@ export default function PagamentoModal({ visible, pedidoId, numeroPedido, client
           )}
           <Text style={styles.label}>Comprovativo</Text>
           <View style={styles.row}>
-            <Pressable style={styles.button} onPress={() => escolher(true)}>
-              <Text>Tirar foto</Text>
-            </Pressable>
+            {Platform.OS !== 'web' && (
+              <Pressable style={styles.button} onPress={() => escolher(true)}>
+                <Text>Tirar foto</Text>
+              </Pressable>
+            )}
             <Pressable style={styles.button} onPress={() => escolher(false)}>
-              <Text>Galeria</Text>
+              <Text>{Platform.OS === 'web' ? 'Escolher imagem' : 'Galeria'}</Text>
             </Pressable>
           </View>
           <View style={styles.row}>

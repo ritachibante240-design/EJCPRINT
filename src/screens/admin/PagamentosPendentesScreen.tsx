@@ -1,6 +1,7 @@
 import { showAppAlert } from '../../components/AppAlert';
 import { colors, fontWeights, radii, spacing } from '../../theme';
 import ActionButton from '../../components/ActionButton';
+import ImagemAutenticada from '../../components/ImagemAutenticada';
 import { obterTokenAdministrador } from '../../services/adminAuthService';
 import { abrirArquivoPedido } from '../../services/arquivoRemotoService';
 import {
@@ -14,7 +15,6 @@ import { sincronizarTudoPendentes } from '../../services/sincronizacaoSeguraServ
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -174,6 +174,11 @@ export default function PagamentosPendentesScreen() {
               </View>
             </View>
             <Text style={styles.amount}>{Number(item.valor ?? 0).toFixed(2)} MT • {item.metodo}</Text>
+            {item.sincronizacao_estado === 'ERRO' && (
+              <Text style={styles.syncError}>
+                Não enviado ao servidor: {item.sincronizacao_erro ?? 'erro desconhecido'}
+              </Text>
+            )}
             {item.referencia && <Text style={styles.info}>Referência: {item.referencia}</Text>}
             {item.motivo_rejeicao && <Text style={styles.rejectionReason}>Motivo da rejeição: {item.motivo_rejeicao}</Text>}
             {item.comprovativo_uri && (comprovativoPdf ? (
@@ -182,11 +187,9 @@ export default function PagamentosPendentesScreen() {
               </Pressable>
             ) : (
               <Pressable onPress={() => void abrirComprovativo(item)}>
-                <Image
-                  source={{
-                    uri: item.comprovativo_uri,
-                    ...(comprovativoRemoto && token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
-                  }}
+                <ImagemAutenticada
+                  uri={item.comprovativo_uri}
+                  token={comprovativoRemoto ? token : null}
                   style={styles.proof}
                   resizeMode="cover"
                 />
@@ -224,6 +227,14 @@ const styles = StyleSheet.create({
   statusTextRejected: { color: colors.danger },
   amount: { color: colors.brand, fontWeight: fontWeights.bold, marginTop: spacing.md },
   info: { color: colors.muted, marginTop: 5 },
+  syncError: {
+    color: colors.danger,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: radii.sm,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+    fontSize: 13,
+  },
   rejectionReason: { color: colors.danger, marginTop: 5, fontSize: 12 },
   filters: { gap: spacing.sm, paddingBottom: spacing.md },
   filter: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radii.pill, paddingHorizontal: 13, paddingVertical: 9 },

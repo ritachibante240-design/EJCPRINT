@@ -22,6 +22,16 @@ function executarNaFilaDeEscrita<T>(operacao: () => Promise<T>): Promise<T> {
   })();
 }
 
+export const MENSAGEM_BASE_EM_USO =
+  'A EJC Print está aberta noutra janela ou separador do navegador. ' +
+  'Feche as outras janelas da EJC Print e toque em "Tentar novamente".';
+
+/** Erro do navegador quando o ficheiro da base já está aberto noutro separador. */
+export function erroDeBaseEmUsoNoutraJanela(erro: unknown) {
+  const texto = erro instanceof Error ? erro.message : String(erro);
+  return /NoModificationAllowedError|createSyncAccessHandle|Access Handles|Invalid VFS state/i.test(texto);
+}
+
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) return dbInstance;
   if (!dbPromise) {
@@ -32,6 +42,9 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       })
       .catch((error) => {
         dbPromise = null;
+        if (Platform.OS === 'web' && erroDeBaseEmUsoNoutraJanela(error)) {
+          throw new Error(MENSAGEM_BASE_EM_USO);
+        }
         throw error;
       });
   }

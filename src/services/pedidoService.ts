@@ -53,7 +53,7 @@ export type Pedido = {
   preco_encadernacao: number;
   sync_chave: string | null;
   remoto_id: string | null;
-  sincronizacao_estado: 'PENDENTE' | 'SINCRONIZADO';
+  sincronizacao_estado: 'PENDENTE' | 'SINCRONIZADO' | 'ERRO';
   sincronizacao_erro: string | null;
 };
 

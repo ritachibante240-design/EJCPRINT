@@ -87,6 +87,24 @@ function mensagemErro(erro: unknown) {
   return erro instanceof Error ? erro.message.slice(0, 240) : 'Falha de sincronização.';
 }
 
+/**
+ * Erro que não se resolve a tentar outra vez (o servidor recusou os dados de forma
+ * definitiva, ou o ficheiro local já não existe). O registo fica marcado como 'ERRO'
+ * em vez de ser reenviado em todas as sincronizações.
+ */
+export class ErroSincronizacaoPermanente extends Error {}
+
+const ESTADOS_HTTP_PERMANENTES = new Set([400, 404, 410, 413, 415, 422]);
+
+async function erroDaRespostaApi(resposta: Response) {
+  const mensagem = resposta.status === 413
+    ? 'O documento excede o tamanho máximo aceite pelo servidor (20 MB).'
+    : await mensagemErroApi(resposta);
+  return ESTADOS_HTTP_PERMANENTES.has(resposta.status)
+    ? new ErroSincronizacaoPermanente(mensagem)
+    : new Error(mensagem);
+}
+
 async function mensagemErroApi(resposta: Response) {
   const corpo = await resposta.json().catch(() => null) as { message?: unknown } | null;
   if (typeof corpo?.message === 'string') return corpo.message;
@@ -104,10 +122,33 @@ async function enviarEstadoPedidoRemoto(apiUrl: string, pedido: Pedido, token: s
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ status }),
   });
-  if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
+  if (!resposta.ok) throw await erroDaRespostaApi(resposta);
 }
 
-export async function sincronizarPedidoLocal(pedido: Pedido) {
+// Garante que o mesmo pedido nunca é enviado por duas sincronizações em simultâneo
+// (arranque da app, ecrãs e criação do pedido podem disparar ao mesmo tempo).
+// Uma segunda chamada espera pela primeira e relê o pedido da base local, para
+// não voltar a enviar o que já foi sincronizado.
+const sincronizacoesPorPedido = new Map<number, Promise<void>>();
+
+export function sincronizarPedidoLocal(pedido: Pedido): Promise<void> {
+  const anterior = sincronizacoesPorPedido.get(pedido.id) ?? Promise.resolve();
+  const atual = anterior
+    .catch(() => undefined)
+    .then(async () => {
+      const atualizado = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', pedido.id);
+      if (atualizado) await sincronizarPedidoLocalSemConcorrencia(atualizado);
+    });
+  sincronizacoesPorPedido.set(pedido.id, atual);
+  atual
+    .finally(() => {
+      if (sincronizacoesPorPedido.get(pedido.id) === atual) sincronizacoesPorPedido.delete(pedido.id);
+    })
+    .catch(() => undefined);
+  return atual;
+}
+
+async function sincronizarPedidoLocalSemConcorrencia(pedido: Pedido) {
   const apiUrl = obterUrlApi();
   if (!apiUrl || !pedido.sync_chave) return;
   if (pedido.remoto_id && pedido.sincronizacao_estado !== 'PENDENTE') return;
@@ -133,7 +174,7 @@ export async function sincronizarPedidoLocal(pedido: Pedido) {
         }),
       });
 
-      if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
+      if (!resposta.ok) throw await erroDaRespostaApi(resposta);
       const remoto = (await resposta.json()) as { id: string };
       if (!remoto.id) throw new Error('A API não retornou o identificador do pedido.');
       remotoId = remoto.id;
@@ -150,7 +191,7 @@ export async function sincronizarPedidoLocal(pedido: Pedido) {
       const body = new FormData();
       if (ehDocumentoWeb(pedido.documento_uri)) {
         const guardado = await lerDocumentoWeb(pedido.documento_uri);
-        if (!guardado) throw new Error('O documento do pedido não está disponível neste navegador.');
+        if (!guardado) throw new ErroSincronizacaoPermanente('O documento do pedido não está disponível neste navegador.');
         body.append('document', guardado.blob, pedido.documento_nome ?? guardado.nome);
       } else if (pedido.documento_uri.startsWith('data:')) {
         const respostaArquivo = await fetch(pedido.documento_uri);
@@ -158,11 +199,11 @@ export async function sincronizarPedidoLocal(pedido: Pedido) {
         body.append('document', arquivo, pedido.documento_nome ?? 'documento');
       } else if (Platform.OS === 'web') {
         const respostaArquivo = await fetch(pedido.documento_uri).catch(() => null);
-        if (!respostaArquivo?.ok) throw new Error('O documento do pedido não está disponível neste navegador.');
+        if (!respostaArquivo?.ok) throw new ErroSincronizacaoPermanente('O documento do pedido não está disponível neste navegador.');
         body.append('document', await respostaArquivo.blob(), pedido.documento_nome ?? 'documento');
       } else {
         const arquivo = new File(pedido.documento_uri);
-        if (!arquivo.exists) throw new Error('O documento do pedido não está disponível neste dispositivo.');
+        if (!arquivo.exists) throw new ErroSincronizacaoPermanente('O documento do pedido não está disponível neste dispositivo.');
         body.append('document', arquivo);
       }
 
@@ -170,7 +211,7 @@ export async function sincronizarPedidoLocal(pedido: Pedido) {
         method: 'POST',
         body,
       });
-      if (!respostaDocumento.ok) throw new Error(await mensagemErroApi(respostaDocumento));
+      if (!respostaDocumento.ok) throw await erroDaRespostaApi(respostaDocumento);
       const documentoRemoto = await respostaDocumento.json() as { id: string };
       if (!documentoRemoto.id) throw new Error('A API não retornou o identificador do documento.');
       await db.runAsync('UPDATE pedidos SET documento_remoto_id = ? WHERE id = ?', documentoRemoto.id, pedido.id);
@@ -192,8 +233,9 @@ export async function sincronizarPedidoLocal(pedido: Pedido) {
   } catch (erro) {
     await db.runAsync(
       `UPDATE pedidos
-       SET sincronizacao_estado = 'PENDENTE', sincronizacao_erro = ?
+       SET sincronizacao_estado = ?, sincronizacao_erro = ?
        WHERE id = ?`,
+      erro instanceof ErroSincronizacaoPermanente ? 'ERRO' : 'PENDENTE',
       mensagemErro(erro),
       pedido.id
     );
@@ -205,6 +247,7 @@ export async function sincronizarPedidosPendentes() {
   const pedidos = await db.getAllAsync<Pedido>(
     `SELECT * FROM pedidos
      WHERE sync_chave IS NOT NULL
+       AND sincronizacao_estado != 'ERRO'
        AND (remoto_id IS NULL OR sincronizacao_estado = 'PENDENTE')
      ORDER BY id ASC`
   );
@@ -323,6 +366,8 @@ export async function sincronizarPedidosRecebidos() {
 
 let filaSincronizacaoCliente: Promise<void> = Promise.resolve();
 
+const MENSAGEM_PEDIDO_INEXISTENTE = 'Este pedido não existe no servidor (pode ter sido criado noutro ambiente ou removido).';
+
 export function sincronizarPedidosCliente(apenasPedidoId?: number) {
   const sincronizacao = filaSincronizacaoCliente.then(
     () => sincronizarPedidosClienteAgora(apenasPedidoId)
@@ -338,7 +383,11 @@ async function sincronizarPedidosClienteAgora(apenasPedidoId?: number) {
   if (apenasPedidoId === undefined) await sincronizarPedidosPendentes();
   const pedidos = apenasPedidoId === undefined
     ? await db.getAllAsync<Pedido>(
-      'SELECT * FROM pedidos WHERE remoto_id IS NOT NULL ORDER BY id ASC'
+      `SELECT * FROM pedidos
+       WHERE remoto_id IS NOT NULL
+         AND NOT (sincronizacao_estado = 'ERRO' AND sincronizacao_erro = ?)
+       ORDER BY id ASC`,
+      MENSAGEM_PEDIDO_INEXISTENTE
     )
     : await db.getAllAsync<Pedido>(
       'SELECT * FROM pedidos WHERE remoto_id IS NOT NULL AND id = ?',
@@ -350,6 +399,16 @@ async function sincronizarPedidosClienteAgora(apenasPedidoId?: number) {
     const resposta = await fetch(
       `${apiUrl}/orders/${encodeURIComponent(pedido.remoto_id)}/customer-status`
     );
+    if (resposta.status === 404) {
+      // O pedido já não existe no servidor: fica marcado e os restantes continuam
+      // a ser atualizados (antes, um único pedido destes fazia falhar tudo).
+      await db.runAsync(
+        `UPDATE pedidos SET sincronizacao_estado = 'ERRO', sincronizacao_erro = ? WHERE id = ?`,
+        MENSAGEM_PEDIDO_INEXISTENTE,
+        pedido.id
+      );
+      continue;
+    }
     if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
     const remoto = await resposta.json() as EstadoClienteRemoto;
     if (remoto.id !== pedido.remoto_id) {

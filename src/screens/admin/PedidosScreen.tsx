@@ -90,6 +90,8 @@ export default function PedidosScreen() {
   const [pedidoProcessando, setPedidoProcessando] = useState<number | null>(
     null,
   );
+  // Qual botão do pedido está a processar: só esse mostra o indicador de carregamento.
+  const [acaoProcessando, setAcaoProcessando] = useState<"estado" | "encadernacao" | "anonimizar" | null>(null);
   const [documentoProcessando, setDocumentoProcessando] = useState<number | null>(null);
   const [pedidoSelecionadoEncadernacao, setPedidoSelecionadoEncadernacao] = useState<Pedido | null>(null);
   const [opcoesEspiral, setOpcoesEspiral] = useState<OpcaoEspiralEncadernacao[]>([]);
@@ -133,6 +135,9 @@ export default function PedidosScreen() {
       setAtualizando(false);
       return;
     }
+    // Mostra logo os pedidos guardados no dispositivo; a atualização do servidor
+    // continua em segundo plano (indicador de atualização no topo da lista).
+    setCarregando(false);
 
     let erroSincronizacao: unknown;
     try {
@@ -166,17 +171,37 @@ export default function PedidosScreen() {
     }, []),
   );
 
+  // Depois de uma ação, mostra logo o resultado guardado no dispositivo e deixa a
+  // atualização com o servidor correr em segundo plano. Antes, o botão ficava a
+  // rodar até a sincronização completa terminar (podia demorar minutos).
+  async function atualizarListaAposAcao() {
+    try {
+      setPedidos(await listarPedidos());
+    } catch (erro) {
+      console.error("Não foi possível atualizar a lista local de pedidos.", erro);
+    }
+    void carregarPedidos(false);
+  }
+
+  async function tentarSincronizarNovamente(pedido: Pedido) {
+    await db.runAsync(
+      "UPDATE pedidos SET sincronizacao_estado = 'PENDENTE', sincronizacao_erro = NULL WHERE id = ? AND sincronizacao_estado = 'ERRO'",
+      pedido.id,
+    );
+    await carregarPedidos(true);
+  }
+
   async function alterarEstado(pedido: Pedido, novoEstado: string) {
     if (pedidoProcessando !== null) return;
     try {
-      setPedidoProcessando(pedido.id);
+      setPedidoProcessando(pedido.id); setAcaoProcessando("estado");
       if (novoEstado === "Em impressão") {
         await iniciarImpressao(pedido.id);
       } else {
         await atualizarEstadoPedido(pedido.id, novoEstado);
       }
 
-      await carregarPedidos(false);
+      await atualizarListaAposAcao();
 
       showAppAlert(
         "Sucesso",
@@ -197,16 +222,16 @@ export default function PedidosScreen() {
         erro instanceof Error ? erro.message : "Ocorreu um erro.",
       );
     } finally {
-      setPedidoProcessando(null);
+      setPedidoProcessando(null); setAcaoProcessando(null);
     }
   }
 
   async function confirmarInicioEncadernacao(pedido: Pedido, espiral: OpcaoEspiralEncadernacao) {
     if (pedidoProcessando !== null) return;
     try {
-      setPedidoProcessando(pedido.id);
+      setPedidoProcessando(pedido.id); setAcaoProcessando("encadernacao");
       const resultado = await iniciarEncadernacao(pedido.id, espiral.id);
-      await carregarPedidos(false);
+      await atualizarListaAposAcao();
       showAppAlert(
         resultado.alreadyConsumed ? "Consumo já registado" : "Encadernação iniciada",
         `${resultado.alreadyConsumed ? "Este pedido já tinha o consumo registado." : "Stock descontado"}: ${resultado.spiralName} e capas para ${pedido.numero_copias} exemplar(es). Custo interno: ${resultado.cost.toFixed(2)} MT. O preço do cliente não foi alterado.`,
@@ -217,14 +242,14 @@ export default function PedidosScreen() {
         erro instanceof Error ? erro.message : "Ocorreu um erro.",
       );
     } finally {
-      setPedidoProcessando(null);
+      setPedidoProcessando(null); setAcaoProcessando(null);
     }
   }
 
   async function pedirInicioEncadernacao(pedido: Pedido) {
     if (pedidoProcessando !== null || !pedido.remoto_id) return;
     try {
-      setPedidoProcessando(pedido.id);
+      setPedidoProcessando(pedido.id); setAcaoProcessando("encadernacao");
       const resultado = await listarOpcoesEspiralEncadernacao(pedido.remoto_id);
       if (resultado.options.length === 0) {
         showAppAlert(
@@ -241,7 +266,7 @@ export default function PedidosScreen() {
         erro instanceof Error ? erro.message : "Ocorreu um erro.",
       );
     } finally {
-      setPedidoProcessando(null);
+      setPedidoProcessando(null); setAcaoProcessando(null);
     }
   }
 
@@ -265,10 +290,10 @@ export default function PedidosScreen() {
   async function confirmarAnonimizacao(pedido: Pedido) {
     if (pedidoProcessando !== null) return;
     try {
-      setPedidoProcessando(pedido.id);
+      setPedidoProcessando(pedido.id); setAcaoProcessando("anonimizar");
       await anonimizarPedido(pedido.id);
       setPedidoAberto(null);
-      await carregarPedidos(false);
+      await atualizarListaAposAcao();
       showAppAlert(
         'Pedido anonimizado',
         'Os dados pessoais e ficheiros associados foram removidos. Os registos financeiros foram mantidos.',
@@ -279,7 +304,7 @@ export default function PedidosScreen() {
         erro instanceof Error ? erro.message : 'Ocorreu um erro.',
       );
     } finally {
-      setPedidoProcessando(null);
+      setPedidoProcessando(null); setAcaoProcessando(null);
     }
   }
 
@@ -443,7 +468,7 @@ export default function PedidosScreen() {
         documento.id,
         pedido.id,
       );
-      await carregarPedidos(false);
+      await atualizarListaAposAcao();
       showAppAlert("Documento anexado", "O ficheiro foi enviado e já pode ser baixado neste pedido.");
     } catch (erro) {
       showAppAlert("Não foi possível anexar o documento", erro instanceof Error ? erro.message : "Verifique a ligação e tente novamente.");
@@ -678,6 +703,17 @@ export default function PedidosScreen() {
             </Text>
           </View>
         </View>
+        {item.sincronizacao_estado === "ERRO" && (
+          <View style={styles.syncError}>
+            <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+            <Text style={styles.syncErrorText}>
+              Não enviado ao servidor: {item.sincronizacao_erro ?? "erro desconhecido"}
+            </Text>
+            <Pressable onPress={() => void tentarSincronizarNovamente(item)}>
+              <Text style={styles.syncErrorAction}>Tentar novamente</Text>
+            </Pressable>
+          </View>
+        )}
         <View style={styles.serviceRow}>
           <View style={styles.serviceIcon}>
             <Ionicons name="print-outline" size={22} color={colors.brand} />
@@ -851,7 +887,7 @@ export default function PedidosScreen() {
                   style={[styles.bindingButton, (pedidoProcessando !== null || !item.remoto_id) && styles.actionButtonDisabled]}
                   onPress={() => pedirInicioEncadernacao(item)}
                 >
-                  {pedidoProcessando === item.id
+                  {pedidoProcessando === item.id && acaoProcessando === "encadernacao"
                     ? <ActivityIndicator color={colors.surface} />
                     : <><Ionicons name="book-outline" size={20} color={colors.surface} /><Text style={styles.advanceText}>Iniciar encadernação</Text></>}
                 </Pressable>
@@ -863,22 +899,23 @@ export default function PedidosScreen() {
                 }
                 style={[
                   styles.advanceButton,
-                  (sinalBloqueado || saldoBloqueado) &&
+                  (sinalBloqueado || saldoBloqueado ||
+                    (pedidoProcessando !== null && acaoProcessando !== "estado")) &&
                     styles.actionButtonDisabled,
                 ]}
                 onPress={() => proximoEstado(item)}
               >
-                {pedidoProcessando === item.id ? <ActivityIndicator color={colors.surface} /> : <><Ionicons name={sinalBloqueado || saldoBloqueado ? "lock-closed-outline" : "arrow-forward-circle-outline"} size={20} color={colors.surface} /><Text style={styles.advanceText}>{sinalBloqueado ? "Aguardando sinal de 50%" : saldoBloqueado ? "Aguardando pagamento" : obterProximaAcao(item.estado, item.servico)}</Text></>}
+                {pedidoProcessando === item.id && acaoProcessando === "estado" ? <ActivityIndicator color={colors.surface} /> : <><Ionicons name={sinalBloqueado || saldoBloqueado ? "lock-closed-outline" : "arrow-forward-circle-outline"} size={20} color={colors.surface} /><Text style={styles.advanceText}>{sinalBloqueado ? "Aguardando sinal de 50%" : saldoBloqueado ? "Aguardando pagamento" : obterProximaAcao(item.estado, item.servico)}</Text></>}
               </Pressable>
             )}
             {item.cliente !== 'Cliente removido' && (
               <Pressable
                 accessibilityRole="button"
                 disabled={pedidoProcessando !== null}
-                style={[styles.privacyActionButton, pedidoProcessando === item.id && styles.actionButtonDisabled]}
+                style={[styles.privacyActionButton, pedidoProcessando !== null && styles.actionButtonDisabled]}
                 onPress={() => pedirAnonimizacao(item)}
               >
-                {pedidoProcessando === item.id
+                {pedidoProcessando === item.id && acaoProcessando === "anonimizar"
                   ? <ActivityIndicator color={colors.danger} />
                   : <Ionicons name="person-remove-outline" size={19} color={colors.danger} />}
                 <Text style={styles.privacyActionText}>Anonimizar dados do cliente</Text>
@@ -1034,8 +1071,11 @@ export default function PedidosScreen() {
       }
       ListEmptyComponent={
         <View style={styles.empty}>
+          {pedidos.length === 0 && atualizando && <ActivityIndicator style={{ marginBottom: 12 }} />}
           <Text style={styles.emptyTitle}>
-            {pedidos.length === 0 ? "Nenhum pedido" : "Nenhum pedido corresponde aos filtros"}
+            {pedidos.length === 0
+              ? (atualizando ? "A atualizar pedidos do servidor..." : "Nenhum pedido")
+              : "Nenhum pedido corresponde aos filtros"}
           </Text>
           {pedidos.length > 0 && (
             <Pressable
@@ -1259,6 +1299,18 @@ const styles = StyleSheet.create({
   },
   orderNumber: { color: colors.brand, fontSize: 18, fontWeight: fontWeights.bold },
   clientName: { color: colors.muted, marginTop: 3 },
+  syncError: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radii.sm,
+    backgroundColor: colors.dangerSoft,
+  },
+  syncErrorText: { color: colors.danger, flex: 1, minWidth: 180, fontSize: 13 },
+  syncErrorAction: { color: colors.danger, fontWeight: fontWeights.bold, fontSize: 13 },
   statusBadge: {
     backgroundColor: colors.border,
     paddingHorizontal: 10,

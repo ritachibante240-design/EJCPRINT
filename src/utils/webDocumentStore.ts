@@ -12,7 +12,7 @@ const LOJA = 'documentos';
 
 type RegistoDocumento = { blob: Blob; nome: string; criadoEm: string };
 
-export function ehDocumentoWeb(uri: string | null | undefined): uri is string {
+export function ehDocumentoWeb(uri: string | null | undefined): boolean {
   return typeof uri === 'string' && uri.startsWith(PREFIXO);
 }
 
@@ -71,6 +71,6 @@ export async function lerDocumentoWeb(uri: string): Promise<{ blob: Blob; nome: 
 }
 
 export async function removerDocumentoWeb(uri: string | null | undefined): Promise<void> {
-  if (!ehDocumentoWeb(uri)) return;
+  if (!uri || !ehDocumentoWeb(uri)) return;
   await executar('readwrite', (loja) => loja.delete(uri.slice(PREFIXO.length)));
 }

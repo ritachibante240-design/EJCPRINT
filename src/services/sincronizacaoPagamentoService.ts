@@ -3,13 +3,14 @@ import { fetch as expoFetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { ehDocumentoWeb, lerDocumentoWeb } from '../utils/webDocumentStore';
-import { sincronizarPedidosPendentes, sincronizarPedidosRecebidos } from './sincronizacaoPedidoService';
+import { sincronizarPedidoLocal, sincronizarPedidosPendentes, sincronizarPedidosRecebidos } from './sincronizacaoPedidoService';
+import type { Pedido } from './pedidoService';
 import { obterTokenAdministrador } from './adminAuthService';
 import type { MetodoPagamento, Pagamento, TipoPagamento } from './pagamentoService';
 
 type EstadoRemoto = 'PENDING' | 'CONFIRMED' | 'REJECTED';
 type PagamentoRemoto = { id: string; status: EstadoRemoto; confirmedAt?: string | null; rejectionReason?: string | null };
-type PedidoRemotoLocal = { remoto_id: string | null };
+type PedidoRemotoLocal = { remoto_id: string | null; sincronizacao_estado: string | null; sincronizacao_erro: string | null };
 type OpcoesSincronizacao = { propagarErrosDeCliente?: boolean; propagarErros?: boolean };
 type PagamentoPendenteRemoto = {
   id: string;
@@ -29,8 +30,18 @@ type PagamentoPendenteRemoto = {
 
 class ApiResponseError extends Error {
   constructor(readonly status: number, message: string) {
-    super(message);
+    super(status === 413 ? 'O comprovativo excede o tamanho máximo aceite pelo servidor (5 MB).' : message);
   }
+}
+
+/** Erro que não se resolve a tentar outra vez: o pagamento fica marcado como 'ERRO'. */
+class ErroPagamentoPermanente extends Error {}
+
+const ESTADOS_HTTP_PERMANENTES = new Set([400, 404, 410, 413, 415, 422]);
+
+function erroPermanente(erro: unknown) {
+  return erro instanceof ErroPagamentoPermanente
+    || (erro instanceof ApiResponseError && ESTADOS_HTTP_PERMANENTES.has(erro.status));
 }
 
 function urlApi() {
@@ -121,17 +132,49 @@ async function aplicarEstadoRemoto(pagamentoId: number, remoto: PagamentoRemoto)
   });
 }
 
-export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: OpcoesSincronizacao = {}) {
+// O mesmo pagamento nunca é enviado por duas sincronizações em simultâneo.
+// Uma segunda chamada espera pela primeira e relê o pagamento da base local.
+const sincronizacoesPorPagamento = new Map<number, Promise<void>>();
+
+export function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: OpcoesSincronizacao = {}): Promise<void> {
+  const anterior = sincronizacoesPorPagamento.get(pagamento.id) ?? Promise.resolve();
+  const atual = anterior
+    .catch(() => undefined)
+    .then(async () => {
+      const atualizado = await db.getFirstAsync<Pagamento>('SELECT * FROM pagamentos WHERE id = ?', pagamento.id);
+      if (atualizado) await sincronizarPagamentoLocalSemConcorrencia(atualizado, opcoes);
+    });
+  sincronizacoesPorPagamento.set(pagamento.id, atual);
+  atual
+    .finally(() => {
+      if (sincronizacoesPorPagamento.get(pagamento.id) === atual) sincronizacoesPorPagamento.delete(pagamento.id);
+    })
+    .catch(() => undefined);
+  return atual;
+}
+
+async function sincronizarPagamentoLocalSemConcorrencia(pagamento: Pagamento, opcoes: OpcoesSincronizacao = {}) {
   const api = urlApi();
   if (!api) return;
 
   try {
-    await sincronizarPedidosPendentes();
+    // Só é preciso que o pedido DESTE pagamento exista no servidor. Antes, todos os
+    // pedidos pendentes do dispositivo eram sincronizados primeiro, o que deixava o
+    // envio do comprovativo à espera de pedidos antigos sem relação com ele.
+    const pedidoLocal = await db.getFirstAsync<Pedido>('SELECT * FROM pedidos WHERE id = ?', pagamento.pedido_id);
+    if (pedidoLocal && !pedidoLocal.remoto_id) await sincronizarPedidoLocal(pedidoLocal);
     const pedido = await db.getFirstAsync<PedidoRemotoLocal>(
-      'SELECT remoto_id FROM pedidos WHERE id = ?',
+      'SELECT remoto_id, sincronizacao_estado, sincronizacao_erro FROM pedidos WHERE id = ?',
       pagamento.pedido_id
     );
-    if (!pedido?.remoto_id) throw new Error('O pedido ainda não foi sincronizado com o servidor.');
+    if (!pedido?.remoto_id) {
+      if (!pedido || pedido.sincronizacao_estado === 'ERRO') {
+        throw new ErroPagamentoPermanente(
+          `O pedido deste pagamento não pode ser enviado ao servidor${pedido?.sincronizacao_erro ? `: ${pedido.sincronizacao_erro}` : '.'}`
+        );
+      }
+      throw new Error('O pedido ainda não foi sincronizado com o servidor.');
+    }
 
     let remoto: PagamentoRemoto;
     if (!pagamento.remoto_id) {
@@ -193,7 +236,7 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
       const resposta = await fetchComTimeout(`${api}/payments/${pagamento.remoto_id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
+      if (!resposta.ok) throw new ApiResponseError(resposta.status, await mensagemErroApi(resposta));
       remoto = (await resposta.json()) as PagamentoRemoto;
     } else {
       const token = await obterTokenAdministrador();
@@ -206,7 +249,7 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
           ? { body: JSON.stringify({ reason: pagamento.motivo_rejeicao ?? 'Pagamento reprovado.' }) }
           : {}),
       });
-      if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
+      if (!resposta.ok) throw new ApiResponseError(resposta.status, await mensagemErroApi(resposta));
       remoto = (await resposta.json()) as PagamentoRemoto;
     }
 
@@ -221,22 +264,23 @@ export async function sincronizarPagamentoLocal(pagamento: Pagamento, opcoes: Op
           ? { body: JSON.stringify({ reason: pagamento.motivo_rejeicao ?? 'Pagamento reprovado.' }) }
           : {}),
       });
-      if (!resposta.ok) throw new Error(await mensagemErroApi(resposta));
+      if (!resposta.ok) throw new ApiResponseError(resposta.status, await mensagemErroApi(resposta));
       remoto = (await resposta.json()) as PagamentoRemoto;
     }
 
     await aplicarEstadoRemoto(pagamento.id, remoto);
   } catch (erro) {
     await db.runAsync(
-      `UPDATE pagamentos SET sincronizacao_estado = 'PENDENTE', sincronizacao_erro = ? WHERE id = ?`,
+      `UPDATE pagamentos SET sincronizacao_estado = ?, sincronizacao_erro = ? WHERE id = ?`,
+      erroPermanente(erro) ? 'ERRO' : 'PENDENTE',
       mensagemErro(erro),
       pagamento.id
     );
     if (opcoes.propagarErros || (
-      opcoes.propagarErrosDeCliente &&
-      erro instanceof ApiResponseError &&
-      erro.status >= 400 &&
-      erro.status < 500
+      opcoes.propagarErrosDeCliente && (
+        erroPermanente(erro) ||
+        (erro instanceof ApiResponseError && erro.status >= 400 && erro.status < 500)
+      )
     )) {
       throw erro;
     }
@@ -264,7 +308,7 @@ export async function sincronizarPagamentosPendentes() {
 
   const pendentes = await db.getAllAsync<Pagamento>(
     `SELECT * FROM pagamentos
-     WHERE (status = 'PENDENTE' AND (remoto_id IS NULL OR sincronizacao_estado = 'PENDENTE'))
+     WHERE (status = 'PENDENTE' AND sincronizacao_estado != 'ERRO' AND (remoto_id IS NULL OR sincronizacao_estado = 'PENDENTE'))
         OR (status = 'CONFIRMADO' AND sincronizacao_estado = 'PENDENTE')
         OR (status = 'REJEITADO' AND sincronizacao_estado = 'PENDENTE' AND remoto_id IS NOT NULL)
      ORDER BY id ASC`
@@ -275,8 +319,10 @@ export async function sincronizarPagamentosPendentes() {
       await sincronizarPagamentoLocal(pagamento, { propagarErros: true });
     } catch (erro) {
       const mensagem = mensagemErro(erro);
-      erros.push(`${pagamento.id}: ${mensagem}`);
       console.warn(`Não foi possível sincronizar o pagamento ${pagamento.id}.`, erro);
+      // Erros definitivos ficam registados no próprio pagamento ('ERRO') e não
+      // fazem falhar a sincronização dos restantes dados.
+      if (!erroPermanente(erro)) erros.push(`${pagamento.id}: ${mensagem}`);
     }
   }
   if (erros.length > 0) {

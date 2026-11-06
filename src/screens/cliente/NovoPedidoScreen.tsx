@@ -162,6 +162,14 @@ export default function NovoPedidoScreen({ navigation }: any) {
       });
       if (!r.canceled) {
         const arquivo = r.assets[0];
+        const tamanho = arquivo.size ?? arquivo.file?.size ?? 0;
+        if (tamanho > 20 * 1024 * 1024) {
+          showAppAlert(
+            "Documento demasiado grande",
+            "O documento deve ter no máximo 20 MB. Comprima o PDF ou divida-o em partes e tente novamente.",
+          );
+          return;
+        }
         const documentoUri = await guardarDocumentoDoPedido(arquivo);
         setDocumento({ ...arquivo, uri: documentoUri });
       }

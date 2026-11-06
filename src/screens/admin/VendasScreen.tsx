@@ -12,6 +12,7 @@ import {
 	FlatList,
 	Pressable,
 	Alert,
+	Platform,
 	Modal,
 	Image,
 } from 'react-native';
@@ -148,7 +149,7 @@ export default function VendasScreen() {
 			setMetodo('Dinheiro');
 			setComprovativoUri(null); setComprovativoNome(null);
 
-			await carregar();
+			void carregar(false);
 
 			showAppAlert(
 				'Pagamento registado',
@@ -370,7 +371,7 @@ export default function VendasScreen() {
 							))}
 						</View>
 						{metodo !== 'Dinheiro' && <><Text style={styles.modalLabel}>Referência</Text><TextInput style={styles.input} value={referencia} onChangeText={setReferencia} placeholder="Opcional" /></>}
-						{metodo !== 'Dinheiro' && <View style={styles.proofSection}><Text style={styles.modalLabel}>Comprovativo</Text>{comprovativoUri ? <View style={styles.proofCard}><Image source={{ uri: comprovativoUri }} style={styles.proofThumbnail} /><View style={styles.proofInfo}><Text style={styles.attachedText}>Comprovativo anexado</Text><Pressable onPress={() => setVisualizarComprovativo(true)}><Text style={styles.viewProof}>Visualizar</Text></Pressable><Pressable onPress={escolherComprovativo}><Text style={styles.changeProof}>Trocar</Text></Pressable></View></View> : <Pressable style={styles.proofButton} onPress={tirarFotoComprovativo}><Text style={styles.methodText}>Fotografar comprovativo</Text></Pressable>}</View>}
+						{metodo !== 'Dinheiro' && <View style={styles.proofSection}><Text style={styles.modalLabel}>Comprovativo</Text>{comprovativoUri ? <View style={styles.proofCard}><Image source={{ uri: comprovativoUri }} style={styles.proofThumbnail} /><View style={styles.proofInfo}><Text style={styles.attachedText}>Comprovativo anexado</Text><Pressable onPress={() => setVisualizarComprovativo(true)}><Text style={styles.viewProof}>Visualizar</Text></Pressable><Pressable onPress={escolherComprovativo}><Text style={styles.changeProof}>Trocar</Text></Pressable></View></View> : <Pressable style={styles.proofButton} onPress={Platform.OS === 'web' ? escolherComprovativo : tirarFotoComprovativo}><Text style={styles.methodText}>{Platform.OS === 'web' ? 'Anexar comprovativo' : 'Fotografar comprovativo'}</Text></Pressable>}</View>}
 
 						<Pressable
 							style={styles.confirmButton}

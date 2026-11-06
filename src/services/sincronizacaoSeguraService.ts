@@ -7,10 +7,23 @@ import {
   sincronizarPagamentosRecebidos,
 } from './sincronizacaoPagamentoService';
 
-export async function sincronizarTudoPendentes(
+// Se já houver uma sincronização geral a decorrer, quem chamar a seguir
+// partilha o mesmo resultado em vez de lançar outra em paralelo.
+let sincronizacaoEmCurso: Promise<void> | null = null;
+
+export function sincronizarTudoPendentes(
   tentativas = 3,
   atrasoMs = 1200,
-) {
+): Promise<void> {
+  if (!sincronizacaoEmCurso) {
+    sincronizacaoEmCurso = executarSincronizacao(tentativas, atrasoMs).finally(() => {
+      sincronizacaoEmCurso = null;
+    });
+  }
+  return sincronizacaoEmCurso;
+}
+
+async function executarSincronizacao(tentativas: number, atrasoMs: number) {
   let ultimoErro: unknown;
 
   for (let tentativa = 1; tentativa <= tentativas; tentativa += 1) {
