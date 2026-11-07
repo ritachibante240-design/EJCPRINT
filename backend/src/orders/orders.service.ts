@@ -1,13 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, StreamableFile } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { basename, extname } from 'node:path';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import type { OrderStatus } from './order-status';
+import { calcularPrecoPedido } from './tabela-precos';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
   constructor(private readonly prisma: PrismaService, private readonly storage: ObjectStorageService) {}
 
   async anonymizeCustomerData(orderId: string, actor = 'Administrador') {
@@ -96,19 +98,12 @@ export class OrdersService {
     });
     if (existingOrder) return existingOrder;
 
-    const printedPages = input.pageCount * input.copyCount;
-    const sheetsRequired = input.doubleSided
-      ? Math.ceil(input.pageCount / 2) * input.copyCount
-      : printedPages;
-    const unitPriceCents = Math.round(input.unitPrice * 100);
-    const bindingPriceCents = Math.round((input.bindingPrice ?? 0) * 100);
     const colorPageCount = input.colorPageCount ?? 0;
-    const colorUnitPriceCents = colorPageCount > 0 ? Math.round((input.colorUnitPrice ?? 0) * 100) : 0;
     if (colorPageCount > input.pageCount) {
       throw new BadRequestException('O número de páginas a cores não pode ser maior que o número de páginas.');
     }
-    if (colorPageCount > 0 && (colorUnitPriceCents <= 0 || !input.colorPages?.trim())) {
-      throw new BadRequestException('Indique as páginas a cores e o respetivo preço.');
+    if (colorPageCount > 0 && !input.colorPages?.trim()) {
+      throw new BadRequestException('Indique as páginas a cores.');
     }
     if (input.pageRange) {
       const [inicio, fim] = input.pageRange.split('-').map(Number);
@@ -116,11 +111,27 @@ export class OrdersService {
         throw new BadRequestException('O intervalo de páginas não corresponde ao número de páginas.');
       }
     }
-    // Páginas P/B ao preço unitário e páginas a cores ao preço de cor, vezes as cópias.
-    const totalCents =
-      (unitPriceCents * (input.pageCount - colorPageCount) + colorUnitPriceCents * colorPageCount) *
+    // O preço vem sempre da tabela do servidor; os preços enviados pela app são ignorados.
+    const preco = calcularPrecoPedido({
+      service: input.service,
+      pageCount: input.pageCount,
+      copyCount: input.copyCount,
+      doubleSided: input.doubleSided,
+      colorPageCount,
+      colorUnitPrice: input.colorUnitPrice,
+      bindingType: input.bindingType ?? 'SEM_ENCADERNACAO',
+    });
+    const totalEnviado = Math.round(
+      ((input.unitPrice * (input.pageCount - colorPageCount) + (input.colorUnitPrice ?? 0) * colorPageCount) *
         input.copyCount +
-      bindingPriceCents;
+        (input.bindingPrice ?? 0)) *
+        100,
+    );
+    if (totalEnviado !== preco.totalCents) {
+      this.logger.warn(
+        `Pedido ${input.externalReference}: a app calculou ${totalEnviado / 100} MT, o servidor cobra ${preco.totalCents / 100} MT.`,
+      );
+    }
 
     const order = await this.prisma.order.create({
       data: {
@@ -128,22 +139,22 @@ export class OrdersService {
         externalReference: input.externalReference,
         customerName: input.customerName.trim(),
         customerPhone: input.customerPhone.trim(),
-        service: input.service.trim(),
+        service: preco.service,
         instructions: input.instructions?.trim() || null,
         deliveryFormat: input.deliveryFormat ?? null,
         deliveryMethod: input.deliveryMethod ?? null,
         pageRange: input.pageRange ?? null,
         colorPages: colorPageCount > 0 ? input.colorPages!.trim() : null,
         colorPageCount,
-        colorUnitPriceCents,
-        unitPriceCents,
+        colorUnitPriceCents: preco.colorUnitPriceCents,
+        unitPriceCents: preco.unitPriceCents,
         pageCount: input.pageCount,
         copyCount: input.copyCount,
         doubleSided: input.doubleSided,
-        sheetsRequired,
-        bindingType: input.bindingType ?? 'SEM_ENCADERNACAO',
-        bindingPriceCents,
-        totalCents,
+        sheetsRequired: preco.sheetsRequired,
+        bindingType: preco.bindingType,
+        bindingPriceCents: preco.bindingPriceCents,
+        totalCents: preco.totalCents,
       },
     });
 

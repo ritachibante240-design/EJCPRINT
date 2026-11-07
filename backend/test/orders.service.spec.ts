@@ -5,7 +5,7 @@ import { OrdersService } from '../src/orders/orders.service';
 describe('OrdersService', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('calculates duplex sheets and total when creating an order', async () => {
+  it('calculates duplex sheets and total from the server price table, ignoring prices sent by the app', async () => {
     const prisma = new PrismaService();
     const input = {
       externalReference: 'mobile-order-1',
@@ -32,10 +32,12 @@ describe('OrdersService', () => {
         customerName: 'Cliente',
         customerPhone: '849000000',
         service: 'Impressão P/B',
-        unitPriceCents: 250,
+        // A app enviou 2,50 MT/página e 15 MT de encadernação; o servidor usa a sua tabela:
+        // 41 páginas × 2 cópias × 3 MT + encadernação (21 folhas → 30 MT) × 2 = 306 MT
+        unitPriceCents: 300,
         sheetsRequired: 42,
-        totalCents: 22_000,
-        bindingPriceCents: 1_500,
+        totalCents: 30_600,
+        bindingPriceCents: 6_000,
       }),
     });
   });
