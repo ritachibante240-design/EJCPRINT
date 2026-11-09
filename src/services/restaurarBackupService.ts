@@ -5,17 +5,40 @@ import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 
 import { getDb } from '../database/database';
+import { descarregarBackupWeb } from './backupService';
+
+// Tabelas que um backup verdadeiro da EJC Print tem de conter. Serve para recusar
+// ficheiros .db de outra aplicação antes de substituir os dados.
+const TABELAS_ESSENCIAIS = ['pedidos', 'pagamentos', 'stock'] as const;
+
+function carimboDeTempo(data = new Date()) {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${data.getFullYear()}-${p(data.getMonth() + 1)}-${p(data.getDate())}_${p(data.getHours())}-${p(
+    data.getMinutes(),
+  )}-${p(data.getSeconds())}`;
+}
+
+/** Confirma que o ficheiro selecionado é mesmo uma base de dados da EJC Print. */
+async function validarBancoEjc(banco: SQLite.SQLiteDatabase) {
+  const existentes = await banco.getAllAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type = 'table'",
+  );
+  const nomes = new Set(existentes.map((linha) => linha.name));
+  const emFalta = TABELAS_ESSENCIAIS.filter((tabela) => !nomes.has(tabela));
+  if (emFalta.length > 0) {
+    throw new Error('O ficheiro selecionado não é um backup válido da EJC Print.');
+  }
+}
 
 /**
- * Seleciona um backup .db e copia-o para o local do banco da aplicação.
+ * Seleciona um backup .db e substitui os dados atuais do dispositivo por esse backup.
  *
- * Esta função ainda não está ligada à interface. Antes de a executar será
- * necessário fechar a conexão SQLite e criar um backup de segurança.
+ * Antes de substituir, guarda sempre uma cópia de emergência dos dados atuais, para que
+ * a operação seja reversível mesmo que o utilizador escolha o ficheiro errado:
+ * - no telemóvel, num ficheiro na área da aplicação;
+ * - na web, descarregando um ficheiro .db para o computador.
  */
 export async function selecionarERestaurarBackup() {
-  let nomeArquivo: string;
-  let conteudoBackup: Uint8Array;
-
   const resultado = await DocumentPicker.getDocumentAsync({
     type: '*/*',
     copyToCacheDirectory: Platform.OS !== 'android',
@@ -27,11 +50,14 @@ export async function selecionarERestaurarBackup() {
   }
 
   const arquivo = resultado.assets[0];
-  nomeArquivo = arquivo.name;
+  const nomeArquivo = arquivo.name;
+  if (!nomeArquivo.toLowerCase().endsWith('.db')) {
+    throw new Error('Selecione um ficheiro de backup .db da EJC Print.');
+  }
+
+  let conteudoBackup: Uint8Array;
   if (Platform.OS === 'web') {
-    conteudoBackup = arquivo.file
-      ? new Uint8Array(await arquivo.file.arrayBuffer())
-      : new Uint8Array();
+    conteudoBackup = arquivo.file ? new Uint8Array(await arquivo.file.arrayBuffer()) : new Uint8Array();
   } else {
     const arquivoCache = new File(Paths.cache, `backup-selecionado-${Date.now()}.db`);
     try {
@@ -45,32 +71,30 @@ export async function selecionarERestaurarBackup() {
     }
   }
 
-  if (!nomeArquivo.toLowerCase().endsWith('.db')) {
-    throw new Error('Selecione um ficheiro de backup .db da EJC Print.');
-  }
-
   if (conteudoBackup.length === 0) {
     throw new Error('O ficheiro de backup não foi encontrado ou está vazio.');
   }
 
-  const agora = new Date();
-  const identificador = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}_${String(agora.getHours()).padStart(2, '0')}-${String(agora.getMinutes()).padStart(2, '0')}-${String(agora.getSeconds()).padStart(2, '0')}`;
-
+  const identificador = carimboDeTempo();
   const bancoAtual = await getDb();
-  if (Platform.OS === 'web') {
-    const bancoImportado = await SQLite.deserializeDatabaseAsync(conteudoBackup);
-    let bancoEmergencia: SQLite.SQLiteDatabase | null = null;
-    try {
-      const tabelaPedidos = await bancoImportado.getFirstAsync<{ name: string }>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'pedidos'"
-      );
-      if (!tabelaPedidos) {
-        throw new Error('O ficheiro selecionado não contém uma base de dados EJC Print válida.');
-      }
 
-      bancoEmergencia = await SQLite.deserializeDatabaseAsync(
-        await bancoAtual.serializeAsync()
-      );
+  if (Platform.OS === 'web') {
+    let bancoImportado: SQLite.SQLiteDatabase;
+    try {
+      bancoImportado = await SQLite.deserializeDatabaseAsync(conteudoBackup);
+    } catch {
+      throw new Error('O ficheiro selecionado não é uma base de dados válida.');
+    }
+    // Cópia de emergência em memória, para repor se a restauração falhar a meio.
+    const bancoEmergencia = await SQLite.deserializeDatabaseAsync(await bancoAtual.serializeAsync());
+    const nomeEmergencia = `EJCPrint_Antes_Restauracao_${identificador}.db`;
+    try {
+      await validarBancoEjc(bancoImportado);
+
+      // Descarrega os dados atuais ANTES de substituir: assim a restauração é reversível
+      // mesmo na web (o utilizador pode voltar a este ficheiro se escolher o backup errado).
+      descarregarBackupWeb(await bancoAtual.serializeAsync(), nomeEmergencia);
+
       try {
         await SQLite.backupDatabaseAsync({
           sourceDatabase: bancoImportado,
@@ -93,13 +117,13 @@ export async function selecionarERestaurarBackup() {
       }
     } finally {
       await bancoImportado.closeAsync();
-      await bancoEmergencia?.closeAsync();
+      await bancoEmergencia.closeAsync();
     }
 
     return {
       cancelado: false as const,
       nome: nomeArquivo,
-      backupEmergencia: null,
+      backupEmergencia: nomeEmergencia,
       reiniciarAplicacao: true as const,
     };
   }
@@ -109,25 +133,18 @@ export async function selecionarERestaurarBackup() {
   const arquivoImportado = new File(Paths.cache, nomeImportado);
   arquivoImportado.write(conteudoBackup);
 
-  const bancoImportado = await SQLite.openDatabaseAsync(
-    nomeImportado,
-    { useNewConnection: true },
-    Paths.cache.uri
-  );
+  let bancoImportado: SQLite.SQLiteDatabase;
+  try {
+    bancoImportado = await SQLite.openDatabaseAsync(nomeImportado, { useNewConnection: true }, Paths.cache.uri);
+  } catch {
+    if (arquivoImportado.exists) arquivoImportado.delete();
+    throw new Error('O ficheiro selecionado não é uma base de dados válida.');
+  }
   let bancoEmergencia: SQLite.SQLiteDatabase | null = null;
   try {
-    const tabelaPedidos = await bancoImportado.getFirstAsync<{ name: string }>(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'pedidos'"
-    );
-    if (!tabelaPedidos) {
-      throw new Error('O ficheiro selecionado não contém uma base de dados EJC Print válida.');
-    }
+    await validarBancoEjc(bancoImportado);
 
-    bancoEmergencia = await SQLite.openDatabaseAsync(
-      nomeEmergencia,
-      { useNewConnection: true },
-      Paths.document.uri
-    );
+    bancoEmergencia = await SQLite.openDatabaseAsync(nomeEmergencia, { useNewConnection: true }, Paths.document.uri);
     await SQLite.backupDatabaseAsync({
       sourceDatabase: bancoAtual,
       sourceDatabaseName: 'main',
@@ -152,7 +169,7 @@ export async function selecionarERestaurarBackup() {
         });
       } catch {
         throw new Error(
-          `A restauração falhou e não foi possível recuperar automaticamente a base anterior. A cópia de emergência foi mantida em ${bancoEmergencia.databasePath}.`
+          `A restauração falhou e não foi possível recuperar automaticamente a base anterior. A cópia de emergência foi mantida em ${bancoEmergencia.databasePath}.`,
         );
       }
       throw erro;
@@ -166,7 +183,7 @@ export async function selecionarERestaurarBackup() {
   return {
     cancelado: false as const,
     nome: nomeArquivo,
-    backupEmergencia: bancoEmergencia?.databasePath ?? null,
+    backupEmergencia: bancoEmergencia?.databasePath ?? nomeEmergencia,
     reiniciarAplicacao: true as const,
   };
 }

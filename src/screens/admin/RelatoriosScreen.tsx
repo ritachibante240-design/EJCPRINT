@@ -115,11 +115,19 @@ export default function RelatoriosScreen() {
       setRestaurando(true);
       const resultado = await selecionarERestaurarBackup();
       if (resultado.cancelado) return;
+      const comoAtualizar =
+        Platform.OS === 'web'
+          ? 'Recarregue a página para atualizar os dados.'
+          : 'Feche completamente a aplicação e abra novamente.';
+      const sobreEmergencia =
+        Platform.OS === 'web'
+          ? resultado.backupEmergencia
+            ? ` Guardámos os dados anteriores em "${resultado.backupEmergencia}" (na pasta de transferências). Guarde esse ficheiro: é a forma de voltar atrás se restaurou o backup errado.`
+            : ''
+          : ' Os dados anteriores foram guardados numa cópia de emergência no dispositivo.';
       showAppAlert(
         'Backup restaurado',
-        Platform.OS === 'web'
-          ? `O backup "${resultado.nome}" foi restaurado. Recarregue a página para atualizar os dados.`
-          : `O backup "${resultado.nome}" foi restaurado. Feche completamente a aplicação e abra novamente.`,
+        `O backup "${resultado.nome}" foi restaurado. ${comoAtualizar}${sobreEmergencia}`,
       );
     } catch (error) {
       showAppAlert('Erro na restauração', error instanceof Error ? error.message : 'Não foi possível restaurar o backup.');
@@ -139,7 +147,10 @@ export default function RelatoriosScreen() {
       ],
       {
         tone: 'danger',
-        note: 'Antes de restaurar, é criada automaticamente uma cópia de segurança dos dados atuais.',
+        note:
+          Platform.OS === 'web'
+            ? 'Antes de restaurar, descarregamos automaticamente uma cópia dos dados atuais para o seu computador, para poder voltar atrás.'
+            : 'Antes de restaurar, é criada automaticamente uma cópia de segurança dos dados atuais.',
       },
     );
   }

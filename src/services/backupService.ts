@@ -24,9 +24,11 @@ export async function criarBackup() {
     const dia = String(data.getDate()).padStart(2, '0');
     const hora = String(data.getHours()).padStart(2, '0');
     const minuto = String(data.getMinutes()).padStart(2, '0');
+    const segundo = String(data.getSeconds()).padStart(2, '0');
 
+    // Segundos no nome para dois backups seguidos não terem o mesmo nome.
     const nomeBackup =
-      `EJCPrint_Backup_${ano}-${mes}-${dia}_${hora}-${minuto}.db`;
+      `EJCPrint_Backup_${ano}-${mes}-${dia}_${hora}-${minuto}-${segundo}.db`;
 
     // Na Web, descarrega diretamente o ficheiro de backup .db no navegador
     if (Platform.OS === 'web') {

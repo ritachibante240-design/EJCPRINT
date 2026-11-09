@@ -34,6 +34,20 @@ executar('npx', ['expo', 'export', '-p', 'web', '--output-dir', 'dist'], {
   EXPO_PUBLIC_API_URL: apiUrl,
 });
 
+// Google Search Console: prova que o site é nosso. O Expo regenera dist/index.html a
+// cada publicação, por isso reinserimos a meta tag aqui. Não remover: o Google exige
+// que ela continue no site mesmo depois de verificado.
+const metaGoogle =
+  '<meta name="google-site-verification" content="6CX4VF_Y9Tndd2fZ5J4xA3ubU5utjrgNE_SZl0WAhSc" />';
+const caminhoIndex = join('dist', 'index.html');
+if (existsSync(caminhoIndex)) {
+  const html = readFileSync(caminhoIndex, 'utf8');
+  if (!html.includes('google-site-verification')) {
+    writeFileSync(caminhoIndex, html.replace('</head>', `${metaGoogle}</head>`));
+    console.log('\nMeta tag de verificação do Google adicionada a dist/index.html.');
+  }
+}
+
 // A Vercel nunca envia pastas chamadas "node_modules", mas o Expo coloca ícones e o
 // motor da base de dados (wa-sqlite.wasm) em dist/assets/node_modules/. Sem isto o
 // site fica preso em "A preparar a base de dados...". Mudamos o nome da pasta e
